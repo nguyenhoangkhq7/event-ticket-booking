@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: event-ticket-booking-service
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY}
+      expiration: ${JWT_EXPIRATION:86400000}
