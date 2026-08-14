@@ -69,6 +69,20 @@ Toàn bộ chỉ số benchmark tiêu chuẩn trong dự án được ghi nhận
 
 ---
 
+### 1.4. Phân Biệt Giữa Automated Integration Test (Java) và JMeter Performance Test
+
+Dự án tiếp cận kiểm thử theo mô hình 2 tầng bổ trợ:
+
+| Đặc tính so sánh | Automated Integration Tests (JUnit 5 + Testcontainers) | JMeter Performance Testing (Tài liệu này) |
+|---|---|---|
+| **Mục tiêu chính** | Kiểm tra tính đúng đắn logic của race condition, khóa dữ liệu trong code (Deterministic correctness). | Đo lường độ trễ mạng (latency, p95), sức chịu tải thực tế (Throughput, RPM/RPS), CPU, RAM của máy chủ. |
+| **Quy mô mô phỏng** | 10 – 50 concurrent threads. | 100 – 50,000 users ảo. |
+| **Môi trường chạy** | Tự động chạy trong CI/CD pipeline (vài giây, tự tạo DB PostgreSQL ảo qua Testcontainers). | Chạy độc lập từ Client HTTP bắn request vào ứng dụng đang chạy ở `localhost:8080`. |
+| **Kịch bản tiêu biểu** | Chống trùng đơn Idempotency, lạm dụng voucher, 20 threads tranh mua 6 vé ([`InventoryIntegrationTest.java`](../src/test/java/com/geekup/eventticketbookingservice/inventory/InventoryIntegrationTest.java)). | Baseline Load Test (500 RPM / 300s), Spike Test (200 threads / 1ms), Stress Test tìm điểm gãy (2500+ RPM). |
+| **Kết quả xuất ra** | Test Passed / Failed trong console. | File log `.jtl` và Báo cáo trực quan **HTML Dashboard**. |
+
+---
+
 ## 2. Cấu Trúc Thư Mục JMeter
 
 ```
@@ -94,18 +108,36 @@ jmeter/
 
 ## 3. Chuẩn Bị Môi Trường & Dữ Liệu Kiểm Thử (3 Bước)
 
-### Bước 1: Khởi động Server Backend & Database
-```bash
-# Khởi động PostgreSQL và Redis:
-docker-compose up -d postgres redis
+### Bước 1: Khởi động Server Backend & Database (Chọn 1 trong 2 cách)
 
-# Chạy ứng dụng Backend (nếu chạy local):
-./mvnw spring-boot:run
-```
+* **Cách A — Nếu chạy toàn bộ qua Docker:**
+  ```bash
+  docker compose up -d --build
+  ```
+  > 💡 *Nếu đã chạy lệnh này thì PostgreSQL, Redis và Backend container đều đã chạy sẵn ở cổng `8080`. Bạn **không cần** chạy `./mvnw spring-boot:run` nữa để tránh lỗi xung đột cổng.*
+
+* **Cách B — Nếu chạy Local cho Development:**
+  ```bash
+  # 1. Khởi động PostgreSQL và Redis
+  docker compose up -d postgres redis
+
+  # 2. Chạy ứng dụng Backend ngoài máy host
+  ./mvnw spring-boot:run
+  ```
 
 ### Bước 2: Chèn 50,000 Users vào Database
+Bắt buộc thực hiện để 50,000 JWT tokens giả lập trong file `users_tokens.csv` map chính xác với tài khoản thực tế trong DB:
+
+```powershell
+# Windows PowerShell:
+Get-Content jmeter/data/seed_50k_users.sql | docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db
+```
+```cmd
+# Windows CMD:
+docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db < jmeter\data\seed_50k_users.sql
+```
 ```bash
-# Nạp trực tiếp vào container PostgreSQL:
+# Linux / macOS / Git Bash:
 docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db < jmeter/data/seed_50k_users.sql
 ```
 *Script sử dụng `generate_series(1, 50000)` trong PostgreSQL, hoàn tất trong ~1-2 giây.*
@@ -124,14 +156,20 @@ docker exec -it event-ticket-redis redis-cli SET inventory:4 500000
 
 ### Cấp độ 1: Baseline Load Test (300 – 500 RPM)
 
-```cmd
-# Chạy 500 RPM trong 5 phút (qua Maven Wrapper):
-.\mvnw verify "-Dsurefire.skip=true" "-Djmeter.booking_rpm=500" "-Djmeter.duration=300"
-```
-```powershell
-# Hoặc chạy qua PowerShell Runner (Tự mở báo cáo HTML sau khi hoàn tất):
-.\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300 -BrowseUsers 100 -BookingUsers 50
-```
+* **Cách 1: Chạy qua Docker Container (Không cần cài Java/JMeter):**
+  ```bash
+  docker compose -f docker-compose.jmeter.yml up
+  ```
+
+* **Cách 2: Chạy qua PowerShell Runner (Tự động mở báo cáo HTML sau khi chạy):**
+  ```powershell
+  .\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300 -BrowseUsers 100 -BookingUsers 50
+  ```
+
+* **Cách 3: Chạy qua Maven Wrapper:**
+  ```cmd
+  .\mvnw verify "-Dsurefire.skip=true" "-Djmeter.booking_rpm=500" "-Djmeter.duration=300"
+  ```
 
 ---
 
@@ -144,10 +182,20 @@ docker exec -it event-ticket-redis redis-cli SET inventory:4 500000
 
 ---
 
-### Cấp độ 3: Flash Sale Spike & Chống Bán Âm Vé (Spike Test)
+### Cấp độ 3: Flash Sale Spike & Chống Bán Âm Vé (Zero Overselling Test)
 
-Sử dụng kịch bản [`jmeter/plans/flash_sale_spike_test.jmx`](../jmeter/plans/flash_sale_spike_test.jmx) với **Synchronizing Timer (Rendezvous Point)** gom 200 threads cùng bắn vào 1 Category trong cùng 1 mili-giây:
+> 💡 **Mục đích:** Kiểm tra tính toàn vẹn khi **cháy vé thực tế**: Chỉ có **50 vé**, nhưng có **200 users** cùng nhấn nút đặt vé trong **đúng 1 mili-giây** (sử dụng *Synchronizing Timer / Rendezvous Point* trong JMeter).
 
+#### 1. Thiết lập tồn kho 50 vé (trên cả Redis & PostgreSQL):
+```bash
+# Đặt Redis còn 50 vé
+docker exec -it event-ticket-redis redis-cli SET inventory:1 50
+
+# Đặt PostgreSQL còn 50 vé
+docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db -c "UPDATE ticket_inventory SET total_quantity = 50, reserved_quantity = 0, sold_quantity = 0 WHERE ticket_category_id = 1;"
+```
+
+#### 2. Thực thi kịch bản Spike Test (200 threads bắn đồng thời trong 1ms):
 ```bash
 jmeter -n -t jmeter/plans/flash_sale_spike_test.jmx \
   -l jmeter/reports/spike_results.jtl \
@@ -156,6 +204,21 @@ jmeter -n -t jmeter/plans/flash_sale_spike_test.jmx \
   -Jcategory_id=1 \
   -Jcsv_file=jmeter/data/users_tokens.csv
 ```
+
+#### 3. Kiểm chứng kết quả "Không Bán Âm Vé" (Zero Overselling):
+* **Phản hồi HTTP từ Server:**
+  * Đúng **50 requests nhận mã `200 OK`** (Đặt vé thành công).
+  * **150 requests còn lại nhận mã `400 TICKET_SOLD_OUT`** (Bị chặn ngay tại Redis).
+* **Kiểm tra tính nhất quán trong Database:**
+  ```sql
+  SELECT total_quantity, reserved_quantity, sold_quantity FROM ticket_inventory WHERE ticket_category_id = 1;
+  ```
+  👉 **Kết quả:** `reserved_quantity = 50`, `total_quantity = 50` (**Tuyệt đối không vượt quá 50 vé**).
+* **Kiểm tra Redis Counter:**
+  ```bash
+  docker exec -it event-ticket-redis redis-cli GET inventory:1
+  ```
+  👉 **Kết quả:** Đúng bằng `0` (không bị số âm).
 
 ---
 

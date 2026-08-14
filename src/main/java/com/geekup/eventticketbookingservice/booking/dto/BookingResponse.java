@@ -1,6 +1,7 @@
 package com.geekup.eventticketbookingservice.booking.dto;
 
 import com.geekup.eventticketbookingservice.booking.BookingStatus;
+import com.geekup.eventticketbookingservice.booking.RiskStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -15,6 +16,7 @@ public class BookingResponse {
     private String bookingCode;
     private Long userId;
     private BookingStatus status;
+    private RiskStatus riskStatus;
     private BigDecimal subtotal;
     private BigDecimal discountAmount;
     private BigDecimal totalAmount;

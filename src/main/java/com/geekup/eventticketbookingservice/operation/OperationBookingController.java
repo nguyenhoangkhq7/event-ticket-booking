@@ -1,7 +1,10 @@
 package com.geekup.eventticketbookingservice.operation;
 
 import com.geekup.eventticketbookingservice.booking.Booking;
+import com.geekup.eventticketbookingservice.booking.BookingStatus;
+import com.geekup.eventticketbookingservice.booking.RiskStatus;
 import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
+import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingRiskStatusRequest;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.user.User;
 import jakarta.validation.Valid;
@@ -20,8 +23,11 @@ public class OperationBookingController {
     private final OperationService operationService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Booking>>> getAllBookings() {
-        return ResponseEntity.ok(ApiResponse.success(operationService.getAllBookings()));
+    public ResponseEntity<ApiResponse<List<Booking>>> getAllBookings(
+            @RequestParam(required = false) BookingStatus status,
+            @RequestParam(required = false) RiskStatus riskStatus
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(operationService.getAllBookings(status, riskStatus)));
     }
 
     @PatchMapping("/{id}/status")
@@ -31,6 +37,15 @@ public class OperationBookingController {
             @AuthenticationPrincipal User admin
     ) {
         return ResponseEntity.ok(ApiResponse.success(operationService.updateBookingStatus(id, request, admin.getId())));
+    }
+
+    @PatchMapping("/{id}/risk-status")
+    public ResponseEntity<ApiResponse<Booking>> updateRiskStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateBookingRiskStatusRequest request,
+            @AuthenticationPrincipal User admin
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(operationService.updateBookingRiskStatus(id, request, admin.getId())));
     }
 
     @PostMapping("/{id}/cancel")

@@ -3,6 +3,7 @@ package com.geekup.eventticketbookingservice.operation;
 import com.geekup.eventticketbookingservice.booking.*;
 import com.geekup.eventticketbookingservice.catalog.*;
 import com.geekup.eventticketbookingservice.operation.dto.CreateConcertRequest;
+import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingRiskStatusRequest;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.voucher.*;
 import com.geekup.eventticketbookingservice.catalog.ConcertMapper;
@@ -120,19 +121,30 @@ public class OperationService {
     // Booking
     @Transactional(readOnly = true)
     public List<Booking> getAllBookings() {
-        return bookingRepository.findAll();
+        return getAllBookings(null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Booking> getAllBookings(BookingStatus status, RiskStatus riskStatus) {
+        return bookingRepository.findBookingsWithFilters(status, riskStatus);
     }
 
     @Transactional
     public Booking updateBookingStatus(Long bookingId, UpdateBookingStatusRequest request, Long adminId) {
-        Booking booking = bookingRepository.findById(bookingId).orElseThrow();
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND));
         
-        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(request.getStatus());
-        booking = bookingRepository.save(booking);
+        return bookingRepository.save(booking);
+    }
 
-
-        return booking;
+    @Transactional
+    public Booking updateBookingRiskStatus(Long bookingId, UpdateBookingRiskStatusRequest request, Long adminId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND));
+        
+        booking.setRiskStatus(request.getRiskStatus());
+        return bookingRepository.save(booking);
     }
 
     @Transactional

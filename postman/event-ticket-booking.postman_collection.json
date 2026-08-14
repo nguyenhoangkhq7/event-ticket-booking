@@ -399,6 +399,79 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "filter-suspicious-bookings",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/bookings?riskStatus=SUSPICIOUS",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "bookings"
+                  ],
+                  "query": [
+                    {
+                      "key": "riskStatus",
+                      "value": "SUSPICIOUS"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "update-booking-risk-status",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"riskStatus\": \"SUSPICIOUS\",\r\n  \"reason\": \"High frequency requests detected\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/operation/bookings/{{bookingId}}/risk-status",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "bookings",
+                    "{{bookingId}}",
+                    "risk-status"
+                  ]
+                }
+              },
+              "response": []
             }
           ]
         },

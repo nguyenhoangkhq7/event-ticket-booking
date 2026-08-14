@@ -156,6 +156,14 @@ mvnw.cmd spring-boot:run
 | `customer1@example.com` | `CUSTOMER` | Khách hàng 1 |
 | `customer2@example.com` | `CUSTOMER` | Khách hàng 2 |
 
+### 🏷️ Mã Voucher Seed Mặc Định (Dùng test Swagger / Postman)
+
+| Mã Voucher | Loại giảm giá | Giá trị | Tổng số lượt phát | Giới hạn / User | Trạng thái |
+|---|---|---|---|---|---|
+| `WELCOME50` | Giảm cố định (Fixed) | 50.000 VNĐ | 500 lượt | 1 lần / user | `ACTIVE` |
+| `SUMMER2026` | Giảm phần trăm (Percentage) | 10% | 100 lượt | 1 lần / user | `ACTIVE` |
+| `VIPFLASH20` | Giảm phần trăm (Percentage) | 20% | 50 lượt | 1 lần / user | `ACTIVE` |
+
 ### Cấu Hình Mặc Định
 
 | Service | Host | Port |
@@ -206,54 +214,127 @@ Dự án cung cấp sẵn file Postman Collection đầy đủ các luồng Cust
 
 ## 🧪 Hướng Dẫn Chạy Test
 
-### Unit Tests
+Dự án phân chia rõ ràng thành 3 cấp độ kiểm thử: **Unit Test**, **Integration Test** và **Performance / Load Test**.
+
+---
+
+### 1. Unit Tests (Kiểm thử đơn vị)
+Kiểm tra logic nghiệp vụ độc lập bằng Mockito & JUnit 5 (không cần DB, không cần Docker, chạy siêu tốc):
 
 ```bash
 # Chạy toàn bộ unit tests
 ./mvnw test
 
-# Windows
+# Windows CMD / PowerShell
 mvnw.cmd test
-```
 
-### Integration Tests (yêu cầu Docker cho Testcontainers)
-
-```bash
-# Chạy unit + integration tests
-./mvnw verify
-```
-
-> **Lưu ý:** Integration tests sử dụng **Testcontainers** để tự động khởi tạo PostgreSQL container. Docker Desktop phải đang chạy.
-
-### Chạy Test Cụ Thể
-
-```bash
 # Chạy một test class cụ thể
 ./mvnw test -Dtest=BookingServiceTest
-
-# Chạy tests theo pattern
-./mvnw test -Dtest="*IntegrationTest"
 
 # Chạy một method cụ thể
 ./mvnw test -Dtest="BookingServiceTest#testCreateBooking"
 ```
 
-### Load Test (JMeter)
+---
+
+### 2. Integration Tests (Kiểm thử tích hợp với Testcontainers)
+Kiểm thử tích hợp luồng dữ liệu thực tế với PostgreSQL.
+
+> 🐳 **Yêu cầu:** Docker Desktop phải đang chạy. **Testcontainers** sẽ tự động khởi tạo container PostgreSQL độc lập và tự dọn dẹp sau khi test xong.
 
 ```bash
-# Chạy JMeter load test qua Maven plugin
-./mvnw verify -Djmeter.host=localhost -Djmeter.port=8080
+# Chạy toàn bộ Integration Tests
+./mvnw test -Dtest="*IntegrationTest"
 
-# Tùy chỉnh parameters
-./mvnw verify \
-  -Djmeter.host=localhost \
-  -Djmeter.port=8080 \
-  -Djmeter.booking_rpm=500 \
-  -Djmeter.booking_users=50 \
-  -Djmeter.duration=300
+# Chạy một Integration Test cụ thể
+./mvnw test -Dtest=ConcertIntegrationTest
 ```
 
-Xem thêm: [JMeter Performance Testing Guide](docs/jmeter_performance_testing_guide.md)
+---
+
+### 3. Load & Performance Tests (Kiểm thử hiệu năng với JMeter)
+
+> ⚠️ **LƯU Ý CỰC KỲ QUAN TRỌNG VỀ LỆNH `./mvnw verify`:**
+> 
+> Plugin `jmeter-maven-plugin` được gắn mặc định vào phase `verify` của Maven. Khi bạn chạy `./mvnw verify`, hệ thống sẽ **tự động kích hoạt bài test tải JMeter** (mặc định kéo dài 5 phút / 300s).
+> 
+> Nếu chỉ muốn chạy Unit/Integration Test thông thường, **KHÔNG NÊN** chạy `./mvnw verify` trần mà hãy dùng `./mvnw test` hoặc `./mvnw test -Dtest="*IntegrationTest"`.
+
+#### 📋 Các bước chuẩn bị bắt buộc trước khi chạy Load Test (Pre-requisites):
+
+1. **Khởi động Backend & Hạ tầng (chọn 1 trong 2 cách):**
+   * **Cách A (Nếu chạy toàn bộ qua Docker):**
+     ```bash
+     docker compose up -d --build
+     ```
+     > 💡 *Lưu ý: Nếu bạn đã chạy lệnh này rồi thì cả PostgreSQL, Redis và Backend đã chạy sẵn ở cổng `8080`, **KHÔNG** cần chạy thêm `./mvnw spring-boot:run` để tránh lỗi xung đột cổng.*
+   * **Cách B (Nếu chạy Local development với IDE / Maven):**
+     ```bash
+     # 1. Chỉ bật database và cache
+     docker compose up -d postgres redis
+
+     # 2. Chạy backend ngoài máy host
+     ./mvnw spring-boot:run
+     ```
+
+2. **Import 50,000 Users & Voucher Test Tải vào Database:**
+   *(Script SQL này sẽ nạp 50,000 users và các mã voucher tải cao `PERF10` giảm 10%, `PERF50K` giảm 50k với 100,000 lượt dùng dành riêng cho JMeter)*:
+   ```bash
+   # Linux / macOS / Git Bash
+   docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db < jmeter/data/seed_50k_users.sql
+
+   # Windows PowerShell
+   Get-Content jmeter/data/seed_50k_users.sql | docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db
+
+   # Windows CMD
+   docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db < jmeter\data\seed_50k_users.sql
+   ```
+
+3. **Nạp tồn kho vé lên Redis (Pre-warming):**
+   * **Khi chạy bài Test Đo Năng Suất / SLA (500 RPM trong 5 phút):**
+     Nạp số lượng lớn để chu trình test chạy liên tục 5 phút mà không bị dừng do hết vé:
+     ```bash
+     docker exec -it event-ticket-redis redis-cli SET inventory:1 500000
+     docker exec -it event-ticket-redis redis-cli SET inventory:2 500000
+     docker exec -it event-ticket-redis redis-cli SET inventory:3 500000
+     docker exec -it event-ticket-redis redis-cli SET inventory:4 500000
+     ```
+   * **Khi chạy bài Test Chống Bán Âm Vé (Zero Overselling Test):**
+     Đặt tồn kho chỉ còn **50 vé** để thử thách 200 users cùng tranh mua trong 1ms:
+     ```bash
+     docker exec -it event-ticket-redis redis-cli SET inventory:1 50
+     docker exec -i event-ticket-postgres psql -U ticket_user -d event_ticket_db -c "UPDATE ticket_inventory SET total_quantity = 50, reserved_quantity = 0, sold_quantity = 0 WHERE ticket_category_id = 1;"
+     ```
+
+#### 🚀 Thực thi Load Test:
+
+* **Bài Test A — Đo Năng Suất & SLA (300 – 500 RPM liên tục):**
+  * *Cách 1 (Docker):* `docker compose -f docker-compose.jmeter.yml up`
+  * *Cách 2 (PowerShell):* `.\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300`
+  * *Cách 3 (Maven):* `./mvnw verify -Dsurefire.skip=true -Djmeter.host=localhost -Djmeter.port=8080`
+
+* **Bài Test B — Flash Sale Spike Test (200 users cùng tranh mua 50 vé trong 1ms):**
+  ```bash
+  jmeter -n -t jmeter/plans/flash_sale_spike_test.jmx -l jmeter/reports/spike_results.jtl -e -o jmeter/reports/spike_report -Jusers=200 -Jcategory_id=1 -Jcsv_file=jmeter/data/users_tokens.csv
+  ```
+  *(Kết quả: Đúng 50 đơn `200 OK`, 150 đơn `400 SOLD OUT`, DB & Redis không bao giờ bán âm vé).*
+
+📖 Xem hướng dẫn chi tiết, phân tích SLA & kịch bản Spike Test tại: [JMeter Performance Testing Guide](docs/jmeter_performance_testing_guide.md)
+
+---
+
+### 4. Kiểm Thử Các Kịch Bản Trọng Yếu (Critical Concurrency & Security Tests)
+
+Dự án cung cấp sẵn các bộ Automated Test Cases chuyên biệt cho từng bài toán chống gian lận & tranh chấp cao điểm:
+
+| Kịch bản kiểm thử | Mô tả & Kỳ vọng | Lệnh chạy test |
+|---|---|---|
+| 🔄 **Chống trùng đơn (Idempotency Key)** | Khi mạng lag, user spam click gửi nhiều request cùng `Idempotency-Key` ➔ Chỉ tạo 1 đơn, không trừ vé 2 lần. | `./mvnw test -Dtest=BookingIntegrationTest` |
+| 🎟️ **Chống bán âm vé (Zero Overselling)** | 20 threads tranh mua 6 vé cuối cùng ➔ Đúng 6 đơn thành công, 14 đơn từ chối. | `./mvnw test -Dtest=InventoryIntegrationTest` |
+| 🏷️ **Chống lạm dụng Voucher** | 1 user cố dùng 1 mã 2 lần (hoặc 100 users tranh mã cuối cùng) ➔ Khóa bi quan chặn đứng `409 Conflict`. | `./mvnw test -Dtest=VoucherIntegrationTest` |
+| ⏳ **Thu hồi vé hết hạn (15 phút)** | Đơn quá 15 phút chưa trả tiền ➔ Scheduler tự động hủy đơn và hoàn trả vé lại cho kho. | `./mvnw test -Dtest=BookingExpiryServiceTest` |
+| 🛡️ **Giới hạn tốc độ (Rate Limiting)** | Gửi quá 5 booking/phút hoặc quá 10 login/phút ➔ Chặn ngay `429 Too Many Requests`. | `./mvnw test -Dtest=RateLimitFilterTest` |
+| 💥 **Stress Test tìm điểm gãy (2500+ RPM)** | Đẩy tải cực hạn để xác định năng lực tối đa của 1 node backend. | `.\jmeter\scripts\run_load_test.ps1 -BookingRpm 2500` |
 
 ---
 

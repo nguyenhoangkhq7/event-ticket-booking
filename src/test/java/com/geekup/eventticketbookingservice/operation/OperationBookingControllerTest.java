@@ -2,7 +2,9 @@ package com.geekup.eventticketbookingservice.operation;
 
 import com.geekup.eventticketbookingservice.booking.Booking;
 import com.geekup.eventticketbookingservice.booking.BookingStatus;
+import com.geekup.eventticketbookingservice.booking.RiskStatus;
 import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
+import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingRiskStatusRequest;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.user.Role;
 import com.geekup.eventticketbookingservice.user.User;
@@ -48,17 +50,18 @@ class OperationBookingControllerTest {
                 .bookingCode("BK-1000")
                 .userId(5L)
                 .status(BookingStatus.RECEIVED)
+                .riskStatus(RiskStatus.NORMAL)
                 .subtotal(new BigDecimal("200.00"))
                 .totalAmount(new BigDecimal("200.00"))
                 .build();
     }
 
     @Test
-    @DisplayName("getAllBookings returns 200 OK and list of bookings")
-    void getAllBookings_Success() {
-        when(operationService.getAllBookings()).thenReturn(List.of(testBooking));
+    @DisplayName("getAllBookings returns 200 OK and list of bookings without filters")
+    void getAllBookings_NoFilters_Success() {
+        when(operationService.getAllBookings(null, null)).thenReturn(List.of(testBooking));
 
-        ResponseEntity<ApiResponse<List<Booking>>> response = operationBookingController.getAllBookings();
+        ResponseEntity<ApiResponse<List<Booking>>> response = operationBookingController.getAllBookings(null, null);
 
         assertNotNull(response);
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -66,7 +69,26 @@ class OperationBookingControllerTest {
         assertTrue(response.getBody().isSuccess());
         assertEquals(1, response.getBody().getData().size());
         assertEquals(1000L, response.getBody().getData().getFirst().getId());
-        verify(operationService, times(1)).getAllBookings();
+        verify(operationService, times(1)).getAllBookings(null, null);
+    }
+
+    @Test
+    @DisplayName("getAllBookings returns 200 OK with status and riskStatus filters")
+    void getAllBookings_WithFilters_Success() {
+        testBooking.setRiskStatus(RiskStatus.SUSPICIOUS);
+        testBooking.setStatus(BookingStatus.FAILED);
+        when(operationService.getAllBookings(BookingStatus.FAILED, RiskStatus.SUSPICIOUS)).thenReturn(List.of(testBooking));
+
+        ResponseEntity<ApiResponse<List<Booking>>> response = operationBookingController.getAllBookings(BookingStatus.FAILED, RiskStatus.SUSPICIOUS);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals(1, response.getBody().getData().size());
+        assertEquals(RiskStatus.SUSPICIOUS, response.getBody().getData().getFirst().getRiskStatus());
+        assertEquals(BookingStatus.FAILED, response.getBody().getData().getFirst().getStatus());
+        verify(operationService, times(1)).getAllBookings(BookingStatus.FAILED, RiskStatus.SUSPICIOUS);
     }
 
     @Test
@@ -92,6 +114,32 @@ class OperationBookingControllerTest {
         assertTrue(response.getBody().isSuccess());
         assertEquals(BookingStatus.PAID, response.getBody().getData().getStatus());
         verify(operationService, times(1)).updateBookingStatus(1000L, request, 99L);
+    }
+
+    @Test
+    @DisplayName("updateRiskStatus returns 200 OK and updated booking")
+    void updateRiskStatus_Success() {
+        UpdateBookingRiskStatusRequest request = UpdateBookingRiskStatusRequest.builder()
+                .riskStatus(RiskStatus.SUSPICIOUS)
+                .reason("Multiple failed attempts detected")
+                .build();
+
+        Booking suspiciousBooking = Booking.builder()
+                .id(1000L)
+                .bookingCode("BK-1000")
+                .riskStatus(RiskStatus.SUSPICIOUS)
+                .build();
+
+        when(operationService.updateBookingRiskStatus(1000L, request, 99L)).thenReturn(suspiciousBooking);
+
+        ResponseEntity<ApiResponse<Booking>> response = operationBookingController.updateRiskStatus(1000L, request, adminUser);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals(RiskStatus.SUSPICIOUS, response.getBody().getData().getRiskStatus());
+        verify(operationService, times(1)).updateBookingRiskStatus(1000L, request, 99L);
     }
 
     @Test

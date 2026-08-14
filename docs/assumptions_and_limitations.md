@@ -138,13 +138,28 @@ Giá trị này không configurable qua application properties hay environment v
 
 **Giả định**: Mã booking được generate tự động: `"BK-" + UUID.randomUUID().substring(0, 8).toUpperCase()`. Ví dụ: `BK-A1B2C3D4`. Không sequential, không chứa thông tin concert hay thời gian.
 
-### 1.13. Redis là Cache, Không Phải Persistent Store
+### 1.13. Redis là In-Memory Cache, Pre-Filter & Circuit Breaker Protector
+
+**Giả định & Nguyên lý Thiết kế**:
+- PostgreSQL là **source of truth** cho inventory.
+- Redis inventory counter được pre-warm từ DB khi admin khởi tạo/cập nhật số lượng vé (`OperationService.setInventory()`).
+- **Cơ chế Fail-Fast & Circuit Breaker (Chống Cascading Failure)**:
+  - Nếu Redis gặp sự cố (crash, network timeout, connection refused, OOM) hoặc inventory key chưa tồn tại: Hệ thống **ngay lập tức kích hoạt Circuit Breaker / Fail-Fast** và trả về mã lỗi HTTP `503 Service Unavailable` (`SERVICE_UNAVAILABLE`).
+  - **Không áp dụng Blind Fallback xuống DB**: Dưới tải Flash Sale cao (500+ requests/phút), việc fallback trực tiếp xuống DB sẽ khiến hàng trăm request dồn dập thực hiện `SELECT ... FOR UPDATE` trên cùng row khóa, gây nghẽn hàng đợi lock, cạn kiệt HikariCP Connection Pool và dẫn đến **Sập dây chuyền (Cascading Failure)** toàn hệ thống.
+### 1.14. Quản Lý Risk Status & Phân Loại Đơn Hàng Nghi Vấn (Suspicious Bookings)
+
+Hệ thống định nghĩa trạng thái đánh giá rủi ro cho mỗi đơn đặt vé qua enum `RiskStatus` ([`RiskStatus.java`](../src/main/java/com/geekup/eventticketbookingservice/booking/RiskStatus.java)) ánh xạ cột `risk_status` trong Database:
+
+| Risk Status | Ý nghĩa | Hành vi hệ thống |
+|---|---|---|
+| `NORMAL` | Đơn hàng thông thường, không phát hiện dấu hiệu bất thường | Cho phép thanh toán và xử lý chu trình đặt vé tiêu chuẩn |
+| `SUSPICIOUS` | Đơn hàng có dấu hiệu nghi vấn (tần suất bất thường, IP lạ, bot pattern) | Đánh dấu để Operator kiểm tra/review thủ công trước khi xử lý |
+| `BLOCKED` | Đơn hàng bị chặn do vi phạm chính sách hoặc gian lận | Chặn giao dịch, hủy đơn và hoàn trả vé/voucher |
 
 **Giả định**:
-- PostgreSQL là **source of truth** cho inventory.
-- Redis inventory counter được pre-warm từ DB lúc startup hoặc khi admin set inventory.
-- Nếu Redis mất data (restart, crash), hệ thống tự động fallback về DB cho inventory validation.
-- Redis được cấu hình `maxmemory-policy noeviction` + `appendonly yes` — dữ liệu được persist nhưng không đảm bảo consistency tuyệt đối.
+- Mỗi booking khi khởi tạo luôn có giá trị mặc định là `risk_status = 'NORMAL'`.
+- Database kiểm soát toàn vẹn qua check constraint: `chk_bookings_risk_status CHECK (risk_status IN ('NORMAL', 'SUSPICIOUS', 'BLOCKED'))`.
+- Sự phân định giữa `status` (vòng đời thanh toán: `RECEIVED`, `PAID`, `CANCELLED`, `FAILED`, `EXPIRED`) và `risk_status` (mức độ rủi ro: `NORMAL`, `SUSPICIOUS`, `BLOCKED`) cho phép hệ thống linh hoạt giám sát độc lập trạng thái giao dịch và mức độ tin cậy của tài khoản/đơn hàng.
 
 ---
 
@@ -292,4 +307,20 @@ Booking code sử dụng 8 ký tự từ UUID (`BK-XXXXXXXX`), tương đương 
 - ⚠️ **Giới hạn**:
   - Hệ thống **chưa hiện thực cơ chế Refresh Token** (`/api/auth/refresh`). Khi token hết hạn sau 1 giờ, client không thể tự động cấp lại token mới trong nền mà người dùng bắt buộc phải đăng nhập lại (`POST /api/auth/login`).
   - Chưa có cơ chế thu hồi/vô hiệu hóa token tức thì (Token Blacklist / Revocation qua Redis) khi người dùng logout hoặc đổi mật khẩu. Token hợp lệ sẽ luôn có hiệu lực cho đến khi hết hạn TTL.
+
+### 2.20. Quản Lý & Xử Lý Failed / Suspicious Bookings (Risk Assessment & Operator Workflow)
+
+- ✅ **Đã triển khai trên Backend & Operation API**:
+  - **Mô hình Dữ liệu & Ràng buộc Toàn vẹn**: Bảng `bookings` có trường `risk_status` (`NORMAL`, `SUSPICIOUS`, `BLOCKED`) và `status` (`RECEIVED`, `PENDING_PAYMENT`, `PAID`, `EXPIRED`, `CANCELLED`, `FAILED`) với Check Constraints toàn vẹn.
+  - **Bộ Lọc Đa Chiều Cho Operation Dashboard**: Endpoint `GET /api/operation/bookings?status={status}&riskStatus={riskStatus}` hỗ trợ Operator lọc riêng biệt các đơn hàng thất bại (`status=FAILED`) hoặc các đơn hàng nghi vấn gian lận (`riskStatus=SUSPICIOUS` / `riskStatus=BLOCKED`) để ưu tiên rà soát và xử lý.
+  - **Đánh Dấu & Cập Nhật Mức Độ Rủi Ro**: Endpoint `PATCH /api/operation/bookings/{id}/risk-status` cho phép Operator gắn cờ `SUSPICIOUS`, chặn `BLOCKED`, hoặc gỡ cờ về `NORMAL` kèm lý do giải trình (`reason`).
+  - **Xử Lý Trạng Thái Đơn Hàng & Can Thiệp Khẩn Cấp**:
+    - `PATCH /api/operation/bookings/{id}/status`: Cập nhật trạng thái booking thủ công (`PAID`, `FAILED`, `CANCELLED`, etc.).
+    - `POST /api/operation/bookings/{id}/cancel`: Hủy đơn nghi vấn/thất bại, tự động giải phóng tồn kho vé (hoàn trả đồng thời cả DB Pessimistic Lock và Redis Atomic Counter) và khôi phục số lượt sử dụng voucher.
+
+- ⚠️ **Giới hạn & Giả định về Automated Fraud Engine**:
+  - Hiện tại, hệ thống tập trung cung cấp giải pháp **Operator Review & Manual Intervention Workflow** qua Dashboard và REST API.
+  - Hệ thống **chưa tích hợp Automated Fraud Scoring Engine** (chấm điểm gian lận tự động bằng Machine Learning thời gian thực, phân tích cụm IP / proxy / VPN detection, fingerprinting thiết bị người dùng).
+  - **Kiến trúc mở rộng trong thực tế (Production Roadmap)**: Các tín hiệu cảnh báo tự động từ dịch vụ chống gian lận bên thứ ba (như Sift Science, Stripe Radar, FingerprintJS) sẽ gửi webhook về backend để tự động cập nhật `risk_status = SUSPICIOUS` hoặc `BLOCKED` trước khi Operator can thiệp.
+
 

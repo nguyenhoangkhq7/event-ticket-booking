@@ -77,7 +77,7 @@ $JtlFile = "$ReportsDir\results_$Timestamp.jtl"
 Write-Host ""
 Write-Host "Test Configuration:" -ForegroundColor Green
 Write-Host "----------------------------------------------------"
-Write-Host "Target Host       : $Protocol://$HostName`:$Port"
+Write-Host "Target Host       : ${Protocol}://${HostName}:${Port}"
 Write-Host "Booking Rate      : $BookingRpm requests/minute (~$([math]::Round($BookingRpm/60, 2)) RPS)"
 Write-Host "Active Users Pool : 50,000 users ($CsvFile)"
 Write-Host "Catalog Users     : $BrowseUsers concurrent threads"

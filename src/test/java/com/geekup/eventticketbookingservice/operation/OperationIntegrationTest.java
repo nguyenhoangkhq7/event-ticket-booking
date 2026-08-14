@@ -8,6 +8,7 @@ import com.geekup.eventticketbookingservice.booking.dto.CreateBookingRequest;
 import com.geekup.eventticketbookingservice.catalog.*;
 import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import com.geekup.eventticketbookingservice.inventory.InventoryRedisService;
+import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingRiskStatusRequest;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.security.JwtService;
 import com.geekup.eventticketbookingservice.user.Role;
@@ -679,6 +680,78 @@ public class OperationIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data", isA(List.class)))
                     .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(2)));
+        }
+
+        @Test
+        @DisplayName("Admin filters bookings by riskStatus and status successfully")
+        void getAllBookings_FilteredByRiskStatusAndStatus_Success() throws Exception {
+            User user = createUniqueCustomer("op_book_risk_u");
+
+            BookingItemRequest item = new BookingItemRequest();
+            item.setTicketCategoryId(1L);
+            item.setQuantity(1);
+
+            CreateBookingRequest req = new CreateBookingRequest();
+            req.setItems(List.of(item));
+
+            var bookingResponse = bookingService.createBooking(user.getId(), req, "idem-op-risk-" + UUID.randomUUID());
+
+            // Mark this booking as SUSPICIOUS
+            Booking booking = bookingRepository.findById(bookingResponse.getId()).orElseThrow();
+            booking.setRiskStatus(RiskStatus.SUSPICIOUS);
+            bookingRepository.save(booking);
+
+            // 1. Query with riskStatus=SUSPICIOUS
+            mockMvc.perform(get("/api/operation/bookings")
+                            .param("riskStatus", "SUSPICIOUS")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data", isA(List.class)))
+                    .andExpect(jsonPath("$.data[?(@.id == " + bookingResponse.getId() + ")].riskStatus").value("SUSPICIOUS"));
+
+            // 2. Query with non-matching riskStatus=BLOCKED -> should not contain this booking
+            mockMvc.perform(get("/api/operation/bookings")
+                            .param("riskStatus", "BLOCKED")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data[?(@.id == " + bookingResponse.getId() + ")].id").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("Admin updates booking risk status successfully (NORMAL -> SUSPICIOUS -> BLOCKED)")
+        void updateBookingRiskStatus_Success() throws Exception {
+            User user = createUniqueCustomer("op_update_risk");
+
+            BookingItemRequest item = new BookingItemRequest();
+            item.setTicketCategoryId(1L);
+            item.setQuantity(1);
+
+            CreateBookingRequest req = new CreateBookingRequest();
+            req.setItems(List.of(item));
+
+            var bookingResponse = bookingService.createBooking(user.getId(), req, "idem-op-risk-upd-" + UUID.randomUUID());
+            assertEquals(RiskStatus.NORMAL, bookingResponse.getRiskStatus());
+
+            // Update to SUSPICIOUS
+            UpdateBookingRiskStatusRequest updateReq = UpdateBookingRiskStatusRequest.builder()
+                    .riskStatus(RiskStatus.SUSPICIOUS)
+                    .reason("High-frequency attempts detected")
+                    .build();
+
+            mockMvc.perform(patch("/api/operation/bookings/" + bookingResponse.getId() + "/risk-status")
+                            .header("Authorization", "Bearer " + adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(updateReq)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.id").value(bookingResponse.getId()))
+                    .andExpect(jsonPath("$.data.riskStatus").value("SUSPICIOUS"));
+
+            // Verify in DB
+            Booking updatedBooking = bookingRepository.findById(bookingResponse.getId()).orElseThrow();
+            assertEquals(RiskStatus.SUSPICIOUS, updatedBooking.getRiskStatus());
         }
 
         @Test

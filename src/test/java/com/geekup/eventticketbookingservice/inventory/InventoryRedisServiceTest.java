@@ -1,5 +1,7 @@
 package com.geekup.eventticketbookingservice.inventory;
 
+import com.geekup.eventticketbookingservice.common.exception.AppException;
+import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -69,7 +71,7 @@ class InventoryRedisServiceTest {
         @DisplayName("tryDecrement returns true when remaining inventory is positive")
         void tryDecrement_PositiveRemaining_ReturnsTrue() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.decrement(REDIS_KEY, 2)).thenReturn(8L);
+            when(valueOperations.decrement(REDIS_KEY, 2)).thenReturn(3L);
 
             boolean result = inventoryRedisService.tryDecrement(CATEGORY_ID, 2);
 
@@ -92,14 +94,15 @@ class InventoryRedisServiceTest {
         }
 
         @Test
-        @DisplayName("tryDecrement returns true (fallback to DB) when key does not exist in Redis (remaining is null)")
-        void tryDecrement_KeyNotFound_FallbackToDb_ReturnsTrue() {
+        @DisplayName("tryDecrement throws SERVICE_UNAVAILABLE when key does not exist in Redis (fail-fast to protect DB)")
+        void tryDecrement_KeyNotFound_ThrowsServiceUnavailable() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.decrement(REDIS_KEY, 2)).thenReturn(null);
 
-            boolean result = inventoryRedisService.tryDecrement(CATEGORY_ID, 2);
+            AppException ex = assertThrows(AppException.class,
+                    () -> inventoryRedisService.tryDecrement(CATEGORY_ID, 2));
 
-            assertTrue(result);
+            assertEquals(ErrorCode.SERVICE_UNAVAILABLE, ex.getErrorCode());
             verify(valueOperations, times(1)).decrement(REDIS_KEY, 2);
             verify(valueOperations, never()).increment(anyString(), anyLong());
         }
@@ -118,14 +121,15 @@ class InventoryRedisServiceTest {
         }
 
         @Test
-        @DisplayName("tryDecrement falls back to DB (returns true) when Redis throws an exception")
-        void tryDecrement_RedisException_FallbackToDb_ReturnsTrue() {
+        @DisplayName("tryDecrement throws SERVICE_UNAVAILABLE (circuit breaker) when Redis throws an exception")
+        void tryDecrement_RedisException_ThrowsServiceUnavailable() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.decrement(REDIS_KEY, 1)).thenThrow(new RuntimeException("Redis timeout"));
 
-            boolean result = inventoryRedisService.tryDecrement(CATEGORY_ID, 1);
+            AppException ex = assertThrows(AppException.class,
+                    () -> inventoryRedisService.tryDecrement(CATEGORY_ID, 1));
 
-            assertTrue(result);
+            assertEquals(ErrorCode.SERVICE_UNAVAILABLE, ex.getErrorCode());
             verify(valueOperations, times(1)).decrement(REDIS_KEY, 1);
         }
     }

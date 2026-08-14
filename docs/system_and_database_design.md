@@ -427,9 +427,10 @@ erDiagram
 | `PATCH` | `/api/operation/concerts/{id}/publish` | Publish concert |
 | `POST` | `/api/operation/concerts/{id}/ticket-categories` | Thêm loại vé |
 | `POST` | `/api/operation/concerts/{id}/ticket-categories/{catId}/inventory` | Thiết lập tồn kho |
-| `GET` | `/api/operation/bookings` | Xem tất cả bookings |
-| `PATCH` | `/api/operation/bookings/{id}/status` | Cập nhật trạng thái booking |
-| `POST` | `/api/operation/bookings/{id}/cancel` | Hủy booking + hoàn kho |
+| `GET` | `/api/operation/bookings` | Danh sách bookings (hỗ trợ lọc theo `status`, `riskStatus`: `NORMAL`, `SUSPICIOUS`, `BLOCKED`) |
+| `PATCH` | `/api/operation/bookings/{id}/status` | Cập nhật trạng thái booking (`FAILED`, `PAID`, `CANCELLED`, etc.) |
+| `PATCH` | `/api/operation/bookings/{id}/risk-status` | Cập nhật rủi ro booking (`NORMAL`, `SUSPICIOUS`, `BLOCKED`) kèm lý do |
+| `POST` | `/api/operation/bookings/{id}/cancel` | Hủy booking + hoàn kho vé (DB & Redis) + hoàn voucher |
 | `POST` | `/api/operation/vouchers` | Tạo voucher campaign |
 | `PATCH` | `/api/operation/vouchers/{id}/disable` | Vô hiệu hóa voucher |
 | `PATCH` | `/api/operation/vouchers/{id}/enable` | Kích hoạt lại voucher |
@@ -440,9 +441,9 @@ erDiagram
 
 > **Bối cảnh**: Hệ thống cần xử lý 300–500 booking requests/phút trong thời điểm Flash Sale mở bán vé concert. Các thách thức chính: **overselling** (bán lố vé), **duplicate booking** (đặt trùng), **voucher abuse** (lạm dụng mã giảm giá), và **system stability** (ổn định hệ thống).
 
-### 5.1. Two-Tier Inventory Control — Chống Overselling
+### 5.1. Two-Tier Inventory Control — Chống Overselling & Ngăn Ngừa Cascading Failure
 
-Đây là cơ chế quan trọng nhất. Hệ thống sử dụng **hai lớp bảo vệ** để đảm bảo không bán lố vé ngay cả dưới tải concurrent cao:
+Đây là cơ chế quan trọng nhất của hệ thống. Hệ thống kết hợp **Redis Atomic Pre-filter (Layer 1)** với **PostgreSQL Pessimistic Write Lock (Layer 2)**, tích hợp cơ chế **Fail-Fast & Circuit Breaker** để vừa đảm bảo không bán lố vé, vừa bảo vệ Database không bị sập dây chuyền (Cascading Failure) dưới tải cao:
 
 ```mermaid
 sequenceDiagram
@@ -453,45 +454,60 @@ sequenceDiagram
 
     C->>BS: POST /api/bookings
 
-    Note over BS: Layer 1: Redis Pre-filter (~0.5ms)
+    Note over BS: Layer 1: Redis Pre-filter & Circuit Breaker (~0.5ms)
     BS->>REDIS: tryDecrement(categoryId, qty)
-    REDIS->>REDIS: DECRBY inventory:categoryId qty
 
-    alt Remaining >= 0
-        REDIS-->>BS: true (stock available)
-    else Remaining < 0
-        REDIS->>REDIS: INCRBY (compensate)
+    alt Redis Failure / Timeout / Key Missing (Circuit Breaker Tripped)
+        REDIS-->>BS: AppException(SERVICE_UNAVAILABLE)
+        BS-->>C: 503 SERVICE_UNAVAILABLE (Bảo vệ DB khỏi Cascading Failure)
+    else Redis Normal - Remaining < 0 (Sold Out)
+        REDIS->>REDIS: INCRBY (compensate rollback)
         REDIS-->>BS: false (sold out)
         BS-->>C: 409 TICKET_SOLD_OUT
-    end
+    else Redis Normal - Remaining >= 0 (Stock Available)
+        REDIS-->>BS: true (stock deducted in Redis)
 
-    Note over BS: Layer 2: DB Pessimistic Lock
-    BS->>DB: findByIdForUpdate(categoryId)
-    Note over DB: SELECT ... FOR UPDATE
-    DB-->>BS: TicketInventory (locked row)
+        Note over BS: Layer 2: DB Pessimistic Lock (Source of Truth)
+        BS->>DB: findByIdForUpdate(categoryId)
+        Note over DB: SELECT ... FOR UPDATE
+        DB-->>BS: TicketInventory (locked row)
 
-    alt available >= qty
-        BS->>DB: reservedQuantity += qty
-        BS-->>C: 200 Booking Created
-    else available < qty
-        BS->>REDIS: release(categoryId, qty)
-        Note over REDIS: INCRBY (compensate)
-        BS-->>C: 409 TICKET_SOLD_OUT
+        alt available >= qty
+            BS->>DB: reservedQuantity += qty
+            BS-->>C: 200 Booking Created
+        else available < qty
+            BS->>REDIS: release(categoryId, qty)
+            Note over REDIS: INCRBY (compensate)
+            BS-->>C: 409 TICKET_SOLD_OUT
+        end
     end
 ```
 
-#### Layer 1: Redis Atomic Pre-filter
+#### Layer 1: Redis Atomic Pre-filter & Fail-Fast Protection
 - **Class**: [`InventoryRedisService.tryDecrement()`](../src/main/java/com/geekup/eventticketbookingservice/inventory/InventoryRedisService.java)
-- **Cơ chế**: Sử dụng lệnh Redis `DECRBY` (atomic operation, ~0.5ms latency)
+- **Cơ chế**: Sử dụng lệnh Redis `DECRBY` (atomic in-memory operation, ~0.5ms latency)
 - **Key pattern**: `inventory:<ticketCategoryId>`
 - **Logic**:
   1. `DECRBY key quantity` → nhận lại giá trị `remaining`
-  2. Nếu `remaining >= 0` → stock available, cho phép tiếp tục
-  3. Nếu `remaining < 0` → stock hết, thực hiện `INCRBY key quantity` (compensating rollback), trả `false`
-- **Graceful degradation**: Nếu Redis unavailable hoặc key chưa tồn tại → trả `true` để fallback xuống DB
-- **Pre-warming**: Redis counter được khởi tạo khi admin set inventory (`OperationService.setInventory()`) gọi `inventoryRedisService.preWarm(categoryId, available)`
+  2. Nếu `remaining >= 0` → stock available, cho phép request đi tiếp xuống Layer 2 (DB lock)
+  3. Nếu `remaining < 0` → stock hết, thực hiện `INCRBY key quantity` (compensating rollback), trả `false` (bắn `409 TICKET_SOLD_OUT`)
+- **Pre-warming**: Redis counter được khởi tạo bắt buộc khi admin thiết lập tồn kho (`OperationService.setInventory()`) thông qua `inventoryRedisService.preWarm(categoryId, available)`
 
-**Trade-off**: Redis pre-filter loại bỏ ~95% request không hợp lệ trước khi chạm DB, giảm đáng kể áp lực lên PostgreSQL. Tuy nhiên, giữa lúc `DECRBY` và `INCRBY` (compensate), tồn tại một khoảng thời gian ngắn mà counter có thể âm — điều này chấp nhận được vì DB layer sẽ xác nhận cuối cùng.
+#### ⚠️ Luận điểm Kiến trúc: Tại sao KHÔNG Fallback mù quáng xuống DB khi Redis lỗi?
+
+| Chiến lược | Hành vi khi Redis sập giữa Flash Sale (500+ req/phút) | Hậu quả hệ thống | Đánh giá |
+|---|---|---|:---:|
+| **Blind DB Fallback** (Trả `true` để xuống DB) | Toàn bộ 500+ request/phút xuyên thủng khiên chắn, đồng loạt gọi `SELECT ... FOR UPDATE` trên cùng 1 row | Lock contention cực lớn → Connection Hold Time tăng vọt → **Cạn kiệt HikariCP Pool** → **Cascading Failure (Sập toàn bộ hệ thống)** | ❌ **LỖ HỔNG NGUY HIỂM** |
+| **Fail-Fast / Circuit Breaker** (Trả `503 Service Unavailable`) | Ngắt mạch ngay lập tức tại Application Layer, từ chối nhận thêm booking ghi, bảo vệ 100% DB connection pool | PostgreSQL vẫn an toàn, các dịch vụ khác (xem concert, auth, payment webhook, health check) vẫn sống bình thường | ✅ **CHUẨN KIẾN TRÚC RESILIENCE** |
+
+- **Cơ chế Circuit Breaker / Fail-Fast**:
+  - Khi Redis gặp sự cố (Timeout, Connection Refused, OOM, Partition) hoặc key inventory không tồn tại trong Redis: `InventoryRedisService` **ngay lập tức ngắt mạch** và ném `AppException(ErrorCode.SERVICE_UNAVAILABLE)`.
+  - HTTP phản hồi trả về mã **`503 Service Unavailable`** với message rõ ràng, yêu cầu client thử lại sau.
+  - Tuyệt đối **không chuyển tiếp tải ghi xuống PostgreSQL** khi thiếu khiên chắn Redis.
+
+- **Phân biệt Read Path vs Write Path trong cơ chế giảm tải (Degradation)**:
+  - **Read Path** (`GET /api/concerts/{id}/ticket-categories`): Cho phép fallback đọc tính toán tồn kho từ DB (`TicketCategoryService`) vì đây là câu lệnh `SELECT` không khóa dòng, chi phí thấp, không gây nghẽn pool.
+  - **Write Path** (`POST /api/bookings`): Bắt buộc **Fail-Fast / Circuit Breaker (503)** vì write transaction sử dụng `SELECT ... FOR UPDATE` giữ lock và connection.
 
 #### Layer 2: PostgreSQL Pessimistic Write Lock
 - **Class**: [`TicketInventoryRepository.findByIdForUpdate()`](../src/main/java/com/geekup/eventticketbookingservice/catalog/TicketInventoryRepository.java)
@@ -501,8 +517,8 @@ sequenceDiagram
   2. Tính `available = totalQuantity - reservedQuantity - soldQuantity`
   3. Validate `available >= requestedQuantity`
   4. Increment `reservedQuantity += quantity`
-  5. Commit → release lock
-- **Đây là nguồn dữ liệu chính xác tuyệt đối** (source of truth). Dù Redis có sai số nhỏ, DB layer đảm bảo tính toàn vẹn.
+  5. Commit transaction → release lock
+- **Nguồn dữ liệu chuẩn xác tuyệt đối (Source of Truth)**: Dù Redis pre-filter có sai số nhỏ trong khoảng micro-second giữa `DECRBY` và `INCRBY`, DB layer đảm bảo tính toàn vẹn tuyệt đối, không bao giờ oversell.
 
 #### Compensating Redis Rollback khi Lỗi
 - **Class**: [`BookingService.createBooking()`](../src/main/java/com/geekup/eventticketbookingservice/booking/BookingService.java)

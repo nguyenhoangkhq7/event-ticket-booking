@@ -41,6 +41,11 @@ public class Booking extends BaseAuditEntity {
 
     private Long voucherId;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "risk_status", nullable = false, length = 30)
+    private RiskStatus riskStatus = RiskStatus.NORMAL;
+
     private ZonedDateTime expiresAt;
 
     @Column(nullable = false, length = 100)

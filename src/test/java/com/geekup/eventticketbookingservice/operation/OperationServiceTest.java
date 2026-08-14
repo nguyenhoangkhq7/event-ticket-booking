@@ -6,6 +6,7 @@ import com.geekup.eventticketbookingservice.common.exception.AppException;
 import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import com.geekup.eventticketbookingservice.inventory.InventoryRedisService;
 import com.geekup.eventticketbookingservice.operation.dto.CreateConcertRequest;
+import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingRiskStatusRequest;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.voucher.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -391,14 +392,30 @@ class OperationServiceTest {
         @Test
         @DisplayName("getAllBookings returns all bookings from repository")
         void getAllBookings_Success() {
-            when(bookingRepository.findAll()).thenReturn(List.of(testBooking));
+            when(bookingRepository.findBookingsWithFilters(null, null)).thenReturn(List.of(testBooking));
 
             List<Booking> bookings = operationService.getAllBookings();
 
             assertNotNull(bookings);
             assertEquals(1, bookings.size());
             assertEquals(testBooking.getId(), bookings.getFirst().getId());
-            verify(bookingRepository, times(1)).findAll();
+            verify(bookingRepository, times(1)).findBookingsWithFilters(null, null);
+        }
+
+        @Test
+        @DisplayName("getAllBookings with status and riskStatus filters calls repository with parameters")
+        void getAllBookings_WithFilters_Success() {
+            testBooking.setStatus(BookingStatus.FAILED);
+            testBooking.setRiskStatus(RiskStatus.SUSPICIOUS);
+            when(bookingRepository.findBookingsWithFilters(BookingStatus.FAILED, RiskStatus.SUSPICIOUS)).thenReturn(List.of(testBooking));
+
+            List<Booking> bookings = operationService.getAllBookings(BookingStatus.FAILED, RiskStatus.SUSPICIOUS);
+
+            assertNotNull(bookings);
+            assertEquals(1, bookings.size());
+            assertEquals(BookingStatus.FAILED, bookings.getFirst().getStatus());
+            assertEquals(RiskStatus.SUSPICIOUS, bookings.getFirst().getRiskStatus());
+            verify(bookingRepository, times(1)).findBookingsWithFilters(BookingStatus.FAILED, RiskStatus.SUSPICIOUS);
         }
 
         @Test
@@ -419,14 +436,45 @@ class OperationServiceTest {
         }
 
         @Test
-        @DisplayName("updateBookingStatus throws NoSuchElementException when booking not found")
+        @DisplayName("updateBookingRiskStatus updates risk status and returns updated booking")
+        void updateBookingRiskStatus_Success() {
+            UpdateBookingRiskStatusRequest request = UpdateBookingRiskStatusRequest.builder()
+                    .riskStatus(RiskStatus.SUSPICIOUS)
+                    .reason("High velocity booking")
+                    .build();
+
+            when(bookingRepository.findById(1000L)).thenReturn(Optional.of(testBooking));
+            when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            Booking updated = operationService.updateBookingRiskStatus(1000L, request, 99L);
+
+            assertNotNull(updated);
+            assertEquals(RiskStatus.SUSPICIOUS, updated.getRiskStatus());
+            verify(bookingRepository, times(1)).save(testBooking);
+        }
+
+        @Test
+        @DisplayName("updateBookingRiskStatus throws AppException when booking not found")
+        void updateBookingRiskStatus_NotFound_ThrowsException() {
+            UpdateBookingRiskStatusRequest request = UpdateBookingRiskStatusRequest.builder()
+                    .riskStatus(RiskStatus.BLOCKED)
+                    .build();
+
+            when(bookingRepository.findById(9999L)).thenReturn(Optional.empty());
+
+            assertThrows(AppException.class, () -> operationService.updateBookingRiskStatus(9999L, request, 99L));
+            verify(bookingRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("updateBookingStatus throws AppException when booking not found")
         void updateBookingStatus_NotFound_ThrowsException() {
             UpdateBookingStatusRequest request = new UpdateBookingStatusRequest();
             request.setStatus(BookingStatus.PAID);
 
             when(bookingRepository.findById(9999L)).thenReturn(Optional.empty());
 
-            assertThrows(NoSuchElementException.class, () -> operationService.updateBookingStatus(9999L, request, 99L));
+            assertThrows(AppException.class, () -> operationService.updateBookingStatus(9999L, request, 99L));
             verify(bookingRepository, never()).save(any());
         }
 

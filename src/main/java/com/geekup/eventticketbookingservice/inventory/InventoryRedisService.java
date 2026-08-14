@@ -1,5 +1,7 @@
 package com.geekup.eventticketbookingservice.inventory;
 
+import com.geekup.eventticketbookingservice.common.exception.AppException;
+import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -28,9 +30,14 @@ public class InventoryRedisService {
     }
 
     /**
-     * Try decrementing inventory atomically in Redis.
-     * @return true if inventory deducted successfully or Redis is bypassed
+     * Try decrementing inventory atomically in Redis (First-line defense / Pre-filter).
+     * Applies Fail-Fast / Circuit Breaker protection: If Redis is unavailable or key is missing,
+     * throws SERVICE_UNAVAILABLE (503) instead of falling back to DB, preventing connection pool
+     * exhaustion and cascading failure during flash sales.
+     *
+     * @return true if inventory deducted successfully
      *         false if sold out in Redis
+     * @throws AppException with SERVICE_UNAVAILABLE if Redis fails or key is missing
      */
     public boolean tryDecrement(Long categoryId, int quantity) {
         String key = KEY_PREFIX + categoryId;
@@ -38,8 +45,8 @@ public class InventoryRedisService {
             Long remaining = redisTemplate.opsForValue().decrement(key, quantity);
 
             if (remaining == null) {
-                log.warn("Inventory key not found in Redis for category {}. Falling back to DB.", categoryId);
-                return true;
+                log.error("Inventory key not found in Redis for category {}. Tripping circuit breaker to protect DB from unmitigated load.", categoryId);
+                throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, "Inventory cache key missing for category " + categoryId);
             }
 
             if (remaining < 0) {
@@ -49,9 +56,11 @@ public class InventoryRedisService {
             }
 
             return true;
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            log.warn("Redis error on tryDecrement for category {}: {}. Falling back to DB.", categoryId, e.getMessage());
-            return true; // Fallback to DB
+            log.error("Redis error on tryDecrement for category {}: {}. Tripping circuit breaker to protect DB from cascading failure.", categoryId, e.getMessage());
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, "Ticket inventory service is temporarily unavailable. Please try again later.");
         }
     }
 

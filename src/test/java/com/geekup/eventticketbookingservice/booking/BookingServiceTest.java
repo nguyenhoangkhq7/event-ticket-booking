@@ -347,6 +347,42 @@ class BookingServiceTest {
         }
 
         @Test
+        @DisplayName("createBooking throws SERVICE_UNAVAILABLE and rolls back Redis when Redis fails during tryDecrement")
+        void createBooking_RedisThrowsServiceUnavailable_RollsBackAndThrows() {
+            TicketCategory categoryStandard = TicketCategory.builder()
+                    .id(20L)
+                    .concertId(1L)
+                    .name("Standard")
+                    .price(new BigDecimal("50.00"))
+                    .maxPerBooking(4)
+                    .build();
+
+            CreateBookingRequest request = createBookingRequest(List.of(
+                    createItem(10L, 2),
+                    createItem(20L, 2)
+            ), null);
+
+            when(bookingRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(Optional.empty());
+            when(categoryRepository.findById(10L)).thenReturn(Optional.of(categoryVip));
+            when(categoryRepository.findById(20L)).thenReturn(Optional.of(categoryStandard));
+            when(concertRepository.findById(1L)).thenReturn(Optional.of(activeConcert));
+
+            // Item 1 succeeds in Redis and DB
+            when(inventoryRedisService.tryDecrement(10L, 2)).thenReturn(true);
+            when(inventoryRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(inventoryVip));
+
+            // Item 2 fails due to Redis circuit breaker / exception
+            when(inventoryRedisService.tryDecrement(20L, 2)).thenThrow(new AppException(ErrorCode.SERVICE_UNAVAILABLE, "Redis unavailable"));
+
+            AppException ex = assertThrows(AppException.class,
+                    () -> bookingService.createBooking(userId, request, idempotencyKey));
+
+            assertEquals(ErrorCode.SERVICE_UNAVAILABLE, ex.getErrorCode());
+            verify(inventoryRedisService, times(1)).release(10L, 2);
+            verify(bookingRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("createBooking throws TICKET_CATEGORY_NOT_FOUND when DB inventory not found and rolls back Redis")
         void createBooking_DbInventoryNotFound_RollsBackRedisAndThrows() {
             CreateBookingRequest request = createBookingRequest(List.of(createItem(10L, 2)), null);
