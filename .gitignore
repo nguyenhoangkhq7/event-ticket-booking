@@ -38,3 +38,9 @@ build/
 .env
 .env.*
 !.env.example
+
+### JMeter Generated ###
+jmeter/tools/
+jmeter/reports/
+*.jtl
+

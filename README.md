@@ -309,9 +309,18 @@ Kiểm thử tích hợp luồng dữ liệu thực tế với PostgreSQL.
 #### 🚀 Thực thi Load Test:
 
 * **Bài Test A — Đo Năng Suất & SLA (300 – 500 RPM liên tục):**
-  * *Cách 1 (Docker):* `docker compose -f docker-compose.jmeter.yml up`
-  * *Cách 2 (PowerShell):* `.\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300`
-  * *Cách 3 (Maven):* `./mvnw verify -Dsurefire.skip=true -Djmeter.host=localhost -Djmeter.port=8080`
+  * *Cách 1 (⭐ Khuyến nghị trên Windows / Local - Tự động mở HTML Report):*
+    ```powershell
+    .\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300
+    ```
+  * *Cách 2 (Chuẩn hóa cho CI/CD Pipeline):*
+    ```bash
+    ./mvnw verify -Dsurefire.skip=true -Djmeter.booking_rpm=500 -Djmeter.duration=300
+    ```
+  * *Cách 3 (Docker - Không cần cài Java/JMeter trên máy):*
+    ```bash
+    docker compose -f docker-compose.jmeter.yml up
+    ```
 
 * **Bài Test B — Flash Sale Spike Test (200 users cùng tranh mua 50 vé trong 1ms):**
   ```bash

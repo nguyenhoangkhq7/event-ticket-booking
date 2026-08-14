@@ -156,20 +156,23 @@ docker exec -it event-ticket-redis redis-cli SET inventory:4 500000
 
 ### Cấp độ 1: Baseline Load Test (300 – 500 RPM)
 
-* **Cách 1: Chạy qua Docker Container (Không cần cài Java/JMeter):**
-  ```bash
-  docker compose -f docker-compose.jmeter.yml up
-  ```
-
-* **Cách 2: Chạy qua PowerShell Runner (Tự động mở báo cáo HTML sau khi chạy):**
+* **Cách 1: Chạy qua PowerShell Runner (⭐ KHUYẾN NGHỊ CAO NHẤT trên Windows / Local):**
+  > *Ưu điểm: Tự động tải JMeter nếu thiếu, quản lý lịch sử báo cáo theo timestamp, và **tự động mở trình duyệt HTML Report** ngay sau khi test xong.*
   ```powershell
   .\jmeter\scripts\run_load_test.ps1 -BookingRpm 500 -Duration 300 -BrowseUsers 100 -BookingUsers 50
   ```
 
-* **Cách 3: Chạy qua Maven Wrapper:**
+* **Cách 2: Chạy qua Maven Wrapper (Khuyến nghị cho CI/CD Pipeline):**
   ```cmd
   .\mvnw verify "-Dsurefire.skip=true" "-Djmeter.booking_rpm=500" "-Djmeter.duration=300"
   ```
+  *(Báo cáo xuất tại: `target/jmeter/reports/event_ticket_booking_load_test/index.html`)*
+
+* **Cách 3: Chạy qua Docker Container (Dành cho máy không cài Java / Python):**
+  ```bash
+  docker compose -f docker-compose.jmeter.yml up
+  ```
+  *(Báo cáo xuất tại: `jmeter/reports/docker_report/index.html`)*
 
 ---
 
