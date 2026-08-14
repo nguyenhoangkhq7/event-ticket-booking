@@ -37,4 +37,4 @@ build/
 *.log
 .env
 .env.*
-docker-compose.yml
+!.env.example

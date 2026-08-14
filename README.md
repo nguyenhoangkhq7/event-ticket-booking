@@ -78,11 +78,19 @@ com.geekup.eventticketbookingservice/
 - **Docker** & **Docker Compose** (bắt buộc)
 - **Java 21** (nếu chạy ngoài Docker)
 
-### ⚠️ Lưu Ý Quan Trọng Về File `.env`
+### ⚙️ Cấu Hình Môi Trường (`.env`)
 
-> File `.env` **phải đặt cùng thư mục** với `docker-compose.yml`, tức là thư mục gốc `event-ticket-booking-service/`. Docker Compose tự động đọc file này để inject biến môi trường cho các container.
+Tạo file `.env` từ file mẫu `.env.example` đặt tại thư mục gốc của project (nếu chưa có):
 
-Nội dung file `.env` (đã có sẵn trong project):
+```bash
+# Linux / macOS
+cp .env.example .env
+
+# Windows (Command Prompt / PowerShell)
+copy .env.example .env
+```
+
+Nội dung file `.env` (đã cấu hình sẵn các giá trị mặc định cho local):
 
 ```env
 # Database configurations
