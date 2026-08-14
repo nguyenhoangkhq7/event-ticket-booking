@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  jmeter:
+    image: justb4/jmeter:5.5
+    container_name: event-ticket-jmeter
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    # Default execution against backend service in Docker network
+    command: >
+      -n -t /workspace/jmeter/plans/event_ticket_booking_load_test.jmx
+      -l /workspace/jmeter/reports/docker_results.jtl
+      -e -o /workspace/jmeter/reports/docker_report
+      -Jhost=backend
+      -Jport=8080
+      -Jprotocol=http
+      -Jbooking_rpm=500
+      -Jbrowse_users=100
+      -Jbooking_users=50
+      -Jduration=300
+      -Jrampup=30
+      -Jcsv_file=/workspace/jmeter/data/users_tokens.csv
+    network_mode: "host"

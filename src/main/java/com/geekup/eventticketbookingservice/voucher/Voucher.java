@@ -1,8 +1,9 @@
 package com.geekup.eventticketbookingservice.voucher;
 
+import com.geekup.eventticketbookingservice.common.entity.BaseAuditEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -13,8 +14,8 @@ import java.time.ZonedDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class Voucher {
+@SuperBuilder
+public class Voucher extends BaseAuditEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -50,8 +51,4 @@ public class Voucher {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private VoucherStatus status;
-
-    @CreationTimestamp
-    @Column(updatable = false)
-    private ZonedDateTime createdAt;
 }

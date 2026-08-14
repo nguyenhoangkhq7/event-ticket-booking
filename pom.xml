@@ -30,7 +30,16 @@
         <java.version>21</java.version>
         <org.mapstruct.version>1.5.5.Final</org.mapstruct.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+        <jmeter.host>localhost</jmeter.host>
+        <jmeter.port>8080</jmeter.port>
+        <jmeter.protocol>http</jmeter.protocol>
+        <jmeter.booking_rpm>500</jmeter.booking_rpm>
+        <jmeter.browse_users>100</jmeter.browse_users>
+        <jmeter.booking_users>50</jmeter.booking_users>
+        <jmeter.duration>300</jmeter.duration>
+        <jmeter.rampup>30</jmeter.rampup>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -48,6 +57,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
+        <!-- OpenAPI 3 / Swagger UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.5</version>
+        </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
@@ -57,6 +72,29 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Caching: Caffeine in-memory -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- Rate Limiting: Bucket4j in-memory -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>8.10.1</version>
+        </dependency>
+
+        <!-- Redis: for inventory counter -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -188,7 +226,84 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>com.lazerycode.jmeter</groupId>
+                <artifactId>jmeter-maven-plugin</artifactId>
+                <version>3.8.0</version>
+                <executions>
+                    <execution>
+                        <id>configuration</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>configure</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jmeter-tests</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jmeter</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jmeter-check-results</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>results</goal>
+                        </goals>
+                    </execution>
+                </executions>
+
+                <configuration>
+                    <testFilesDirectory>${project.basedir}/jmeter/plans</testFilesDirectory>
+                    <testFilesIncluded>
+                        <jMeterTestFile>event_ticket_booking_load_test.jmx</jMeterTestFile>
+                    </testFilesIncluded>
+                    <generateReports>true</generateReports>
+                    <ignoreResultFailures>true</ignoreResultFailures>
+                    <errorRateThresholdInPercent>100</errorRateThresholdInPercent>
+                    <propertiesUser>
+                        <host>${jmeter.host}</host>
+                        <port>${jmeter.port}</port>
+                        <protocol>${jmeter.protocol}</protocol>
+                        <booking_rpm>${jmeter.booking_rpm}</booking_rpm>
+                        <browse_users>${jmeter.browse_users}</browse_users>
+                        <booking_users>${jmeter.booking_users}</booking_users>
+                        <duration>${jmeter.duration}</duration>
+                        <rampup>${jmeter.rampup}</rampup>
+                        <csv_file>${project.basedir}/jmeter/data/users_tokens.csv</csv_file>
+                    </propertiesUser>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>auto-clean-jmeter-reports</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                        <configuration>
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}/jmeter/reports</directory>
+                                    <followSymlinks>false</followSymlinks>
+                                </fileset>
+                                <fileset>
+                                    <directory>${project.build.directory}/jmeter/results</directory>
+                                    <followSymlinks>false</followSymlinks>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+
 
 </project>

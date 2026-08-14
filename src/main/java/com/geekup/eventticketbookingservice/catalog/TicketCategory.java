@@ -2,13 +2,15 @@ package com.geekup.eventticketbookingservice.catalog;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "ticket_categories")
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -35,7 +37,7 @@ public class TicketCategory {
     @Column(nullable = false, length = 20)
     private TicketCategoryStatus status;
 
-    @CreationTimestamp
-    @Column(updatable = false)
+    @CreatedDate
+    @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 }

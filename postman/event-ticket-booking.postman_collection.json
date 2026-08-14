@@ -1,0 +1,775 @@
+{
+  "info": {
+    "_postman_id": "d746b2da-8cc1-4790-8697-f2bac1bc9c33",
+    "name": "event-ticket-booking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "35320300"
+  },
+  "item": [
+    {
+      "name": "customer",
+      "item": [
+        {
+          "name": "browse-concert",
+          "item": [
+            {
+              "name": "get-all-concert",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/concerts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "concerts"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get-concert-by-id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/concerts/{{concertId}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "concerts",
+                    "{{concertId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "view-ticket-category",
+          "item": [
+            {
+              "name": "get-ticket-categories-by-concert",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/concerts/{{concertId}}/ticket-categories",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "concerts",
+                    "{{concertId}}",
+                    "ticket-categories"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "booking",
+          "item": [
+            {
+              "name": "create-booking",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.data && jsonData.data.id) {\r\n    pm.collectionVariables.set(\"bookingId\", jsonData.data.id);\r\n    console.log(\"Saved bookingId to collectionVariables:\", jsonData.data.id);\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "test-key-002"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"items\": [\r\n    {\r\n      \"ticketCategoryId\": 1,\r\n      \"quantity\": 3\r\n    }\r\n  ],\r\n  \"voucherCode\": \"VIPFLASH20\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/bookings",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "bookings"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get-all-booking",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/bookings",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "bookings"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get-booking-by-id",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/bookings/{{bookingId}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "bookings",
+                    "{{bookingId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "payment",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/bookings/{{bookingId}}/confirm-payment",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "bookings",
+                    "{{bookingId}}",
+                    "confirm-payment"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "authentication",
+          "item": [
+            {
+              "name": "register",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"fullName\": \"Nguyen Van A\",\r\n  \"email\": \"nguyenvana@example.com\",\r\n  \"password\": \"password123\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/register",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"email\": \"nguyenvana@example.com\",\r\n  \"password\": \"password123\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admin",
+      "item": [
+        {
+          "name": "booking",
+          "item": [
+            {
+              "name": "get-all-booking",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/bookings",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "bookings"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "cancel-booking",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/bookings/{{bookingId}}/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "bookings",
+                    "{{bookingId}}",
+                    "cancel"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "update-booking-status",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"status\": \"PAID\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/operation/bookings/{{bookingId}}/status",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "bookings",
+                    "{{bookingId}}",
+                    "status"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "concert",
+          "item": [
+            {
+              "name": "create-concert",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.data && jsonData.data.id) {\r\n    pm.collectionVariables.set(\"concertId\", jsonData.data.id);\r\n    console.log(\"Saved concertId to collectionVariables:\", jsonData.data.id);\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"name\": \"Anh Trai Say Hi 2026\",\r\n  \"description\": \"Super concert quy tụ dàn nghệ sĩ đỉnh cao\",\r\n  \"venue\": \"Sân vận động Quốc gia Mỹ Đình, Hà Nội\",\r\n  \"startAt\": \"2026-11-20T19:00:00+07:00\",\r\n  \"endAt\": \"2026-11-20T23:00:00+07:00\",\r\n  \"saleStartAt\": \"2026-08-01T10:00:00+07:00\",\r\n  \"saleEndAt\": \"2026-11-19T23:59:59+07:00\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/operation/concerts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "concerts"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "publish-concert",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/concerts/{{concertId}}/publish",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "concerts",
+                    "{{concertId}}",
+                    "publish"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "add-ticket-categories",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      ""
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.data && jsonData.data.id) {\r\n    pm.collectionVariables.set(\"categoryId\", jsonData.data.id);\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"name\": \"VVIP Diamond\",\r\n  \"price\": 5000000.00,\r\n  \"maxPerBooking\": 2\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/operation/concerts/{{concertId}}/ticket-categories",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "concerts",
+                    "{{concertId}}",
+                    "ticket-categories"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "add-amount-ticket",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/concerts/{{concertId}}/ticket-categories/{{categoryId}}/inventory?totalQuantity=500",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "concerts",
+                    "{{concertId}}",
+                    "ticket-categories",
+                    "{{categoryId}}",
+                    "inventory"
+                  ],
+                  "query": [
+                    {
+                      "key": "totalQuantity",
+                      "value": "500"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "voucher",
+          "item": [
+            {
+              "name": "create-voucher",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "var jsonData = pm.response.json();\r\nif (jsonData.data && jsonData.data.id) {\r\n    pm.collectionVariables.set(\"voucherId\", jsonData.data.id);\r\n}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"name\": \"Khuyến Mãi Siêu Cấp 25%\",\r\n  \"discountType\": \"PERCENTAGE\",\r\n  \"discountValue\": 25.00,\r\n  \"maxRedemptions\": 100,\r\n  \"maxPerUser\": 1,\r\n  \"startsAt\": \"2026-08-01T00:00:00+07:00\",\r\n  \"endsAt\": \"2026-12-31T23:59:59+07:00\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/operation/vouchers?code=SUPERDEAL2",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "vouchers"
+                  ],
+                  "query": [
+                    {
+                      "key": "code",
+                      "value": "SUPERDEAL2"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "disable-voucher",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/vouchers/{{voucherId}}/disable",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "vouchers",
+                    "{{voucherId}}",
+                    "disable"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "enable-voucher",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin_access_token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/operation/vouchers/{{voucherId}}/enable",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "operation",
+                    "vouchers",
+                    "{{voucherId}}",
+                    "enable"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"admin_access_token\", jsonData.accessToken);\r\n    console.log(\"Saved admin_access_token to collection variables\");\r\n}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"admin@eventticket.com\",\n    \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "admin_access_token",
+      "value": ""
+    },
+    {
+      "key": "concertId",
+      "value": "1"
+    },
+    {
+      "key": "categoryId",
+      "value": "1"
+    },
+    {
+      "key": "voucherId",
+      "value": "1"
+    },
+    {
+      "key": "bookingId",
+      "value": "1"
+    }
+  ]
+}

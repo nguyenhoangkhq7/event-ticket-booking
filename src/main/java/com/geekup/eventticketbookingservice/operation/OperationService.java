@@ -25,9 +25,14 @@ public class OperationService {
     private final TicketInventoryRepository inventoryRepository;
     
     private final VoucherRepository voucherRepository;
+    private final VoucherRedemptionRepository voucherRedemptionRepository;
     
     private final BookingRepository bookingRepository;
     private final BookingItemRepository bookingItemRepository;
+
+    private final ConcertService concertService;
+    private final TicketCategoryService ticketCategoryService;
+    private final com.geekup.eventticketbookingservice.inventory.InventoryRedisService inventoryRedisService;
 
     // Concert
     @Transactional
@@ -40,7 +45,9 @@ public class OperationService {
     public Concert publishConcert(Long id) {
         Concert concert = concertRepository.findById(id).orElseThrow();
         concert.setStatus(ConcertStatus.PUBLISHED);
-        return concertRepository.save(concert);
+        Concert saved = concertRepository.save(concert);
+        concertService.evictConcertCache();
+        return saved;
     }
 
     @Transactional
@@ -48,7 +55,9 @@ public class OperationService {
         Concert concert = concertRepository.findById(concertId).orElseThrow();
         category.setConcertId(concert.getId());
         category.setStatus(TicketCategoryStatus.ACTIVE);
-        return categoryRepository.save(category);
+        TicketCategory saved = categoryRepository.save(category);
+        ticketCategoryService.evictCategoryCache(concertId);
+        return saved;
     }
 
     @Transactional
@@ -63,7 +72,16 @@ public class OperationService {
                         .build());
                         
         inventory.setTotalQuantity(totalQuantity);
-        return inventoryRepository.save(inventory);
+        TicketInventory saved = inventoryRepository.save(inventory);
+
+        // Pre-warm Redis with current available quantity
+        int available = Math.max(0, totalQuantity - saved.getReservedQuantity() - saved.getSoldQuantity());
+        inventoryRedisService.preWarm(categoryId, available);
+
+        // Evict category cache so fresh quantity is fetched
+        ticketCategoryService.evictCategoryCache(category.getConcertId());
+
+        return saved;
     }
 
     @Transactional
@@ -129,8 +147,7 @@ public class OperationService {
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
 
-
-        // Release inventory
+        // Release inventory (DB and Redis)
         List<BookingItem> items = bookingItemRepository.findByBookingId(booking.getId());
         for (BookingItem item : items) {
             TicketInventory inventory = inventoryRepository.findByIdForUpdate(item.getTicketCategoryId()).orElseThrow();
@@ -140,6 +157,23 @@ public class OperationService {
                 inventory.setSoldQuantity(Math.max(0, inventory.getSoldQuantity() - item.getQuantity()));
             }
             inventoryRepository.save(inventory);
+
+            // Release Redis inventory
+            inventoryRedisService.release(item.getTicketCategoryId(), item.getQuantity());
+        }
+
+        // Revert voucher redemption if any
+        if (booking.getVoucherId() != null) {
+            voucherRedemptionRepository.deleteByVoucherIdAndBookingId(booking.getVoucherId(), booking.getId());
+
+            Voucher voucher = voucherRepository.findById(booking.getVoucherId()).orElse(null);
+            if (voucher != null) {
+                voucher.setRedeemedCount(Math.max(0, voucher.getRedeemedCount() - 1));
+                if (voucher.getStatus() == VoucherStatus.USED_UP) {
+                    voucher.setStatus(VoucherStatus.ACTIVE);
+                }
+                voucherRepository.save(voucher);
+            }
         }
     }
 }

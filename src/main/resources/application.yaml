@@ -2,8 +2,53 @@ spring:
   application:
     name: event-ticket-booking-service
 
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: EventTicketHikariPool
+
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 500ms
+      lettuce:
+        pool:
+          max-active: 20
+          min-idle: 5
+
+server:
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 50
+    accept-count: 200
+    connection-timeout: 3000
+
 application:
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
       expiration: ${JWT_EXPIRATION:86400000}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    doc-expansion: list
+

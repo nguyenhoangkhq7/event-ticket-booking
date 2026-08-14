@@ -1,9 +1,9 @@
 package com.geekup.eventticketbookingservice.catalog;
 
+import com.geekup.eventticketbookingservice.common.entity.BaseAuditEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.experimental.SuperBuilder;
 
 import java.time.ZonedDateTime;
 
@@ -13,8 +13,8 @@ import java.time.ZonedDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class Concert {
+@SuperBuilder
+public class Concert extends BaseAuditEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -42,10 +42,19 @@ public class Concert {
     @Column(nullable = false, length = 20)
     private ConcertStatus status;
 
-    @CreationTimestamp
-    @Column(updatable = false)
-    private ZonedDateTime createdAt;
-
-    @UpdateTimestamp
-    private ZonedDateTime updatedAt;
+    public Concert(Long id, String name, String description, String venue,
+                   ZonedDateTime startAt, ZonedDateTime endAt,
+                   ZonedDateTime saleStartAt, ZonedDateTime saleEndAt,
+                   ConcertStatus status, ZonedDateTime createdAt, ZonedDateTime updatedAt) {
+        super(createdAt, updatedAt);
+        this.id = id;
+        this.name = name;
+        this.description = description;
+        this.venue = venue;
+        this.startAt = startAt;
+        this.endAt = endAt;
+        this.saleStartAt = saleStartAt;
+        this.saleEndAt = saleEndAt;
+        this.status = status;
+    }
 }

@@ -12,5 +12,7 @@ public interface ConcertMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "status", constant = "DRAFT")
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     Concert toConcert(CreateConcertRequest request);
 }

@@ -35,6 +35,7 @@ public class BookingService {
     private final ConcertRepository concertRepository;
     private final VoucherService voucherService;
     private final BookingMapper bookingMapper;
+    private final com.geekup.eventticketbookingservice.inventory.InventoryRedisService inventoryRedisService;
 
     @Transactional
     public BookingResponse createBooking(Long userId, CreateBookingRequest request, String idempotencyKey) {
@@ -47,83 +48,105 @@ public class BookingService {
         // 2. Validate Items & Lock Inventory
         BigDecimal subtotal = BigDecimal.ZERO;
         List<BookingItem> bookingItems = new ArrayList<>();
+        List<com.geekup.eventticketbookingservice.booking.dto.BookingItemRequest> redisDeductedItems = new ArrayList<>();
         
-        for (var itemReq : request.getItems()) {
-            TicketCategory category = categoryRepository.findById(itemReq.getTicketCategoryId())
-                    .orElseThrow(() -> new AppException(ErrorCode.TICKET_CATEGORY_NOT_FOUND));
+        try {
+            for (var itemReq : request.getItems()) {
+                TicketCategory category = categoryRepository.findById(itemReq.getTicketCategoryId())
+                        .orElseThrow(() -> new AppException(ErrorCode.TICKET_CATEGORY_NOT_FOUND));
 
-            // Validate sale window
-            Concert concert = concertRepository.findById(category.getConcertId()).orElseThrow();
-            ZonedDateTime now = ZonedDateTime.now();
-            if (now.isBefore(concert.getSaleStartAt()) || now.isAfter(concert.getSaleEndAt())) {
-                throw new AppException(ErrorCode.CONCERT_NOT_FOUND, "Concert is not in sale period");
+                // Validate sale window
+                Concert concert = concertRepository.findById(category.getConcertId()).orElseThrow();
+                ZonedDateTime now = ZonedDateTime.now();
+                if (now.isBefore(concert.getSaleStartAt()) || now.isAfter(concert.getSaleEndAt())) {
+                    throw new AppException(ErrorCode.CONCERT_NOT_FOUND, "Concert is not in sale period");
+                }
+
+                if (itemReq.getQuantity() > category.getMaxPerBooking()) {
+                    throw new AppException(ErrorCode.NOT_ENOUGH_TICKETS, "Exceeds max per booking limit");
+                }
+
+                // Redis Pre-filter (atomic, fast ~0.5ms)
+                boolean redisDeducted = inventoryRedisService.tryDecrement(category.getId(), itemReq.getQuantity());
+                if (!redisDeducted) {
+                    throw new AppException(ErrorCode.TICKET_SOLD_OUT, "Not enough tickets for category " + category.getName());
+                }
+                redisDeductedItems.add(itemReq);
+
+                // Lock inventory in DB
+                TicketInventory inventory = inventoryRepository.findByIdForUpdate(category.getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.TICKET_CATEGORY_NOT_FOUND, "Inventory not found"));
+
+                int available = inventory.getTotalQuantity() - inventory.getReservedQuantity() - inventory.getSoldQuantity();
+                if (available < itemReq.getQuantity()) {
+                    throw new AppException(ErrorCode.TICKET_SOLD_OUT, "Not enough tickets for category " + category.getName());
+                }
+
+                // Deduct in DB
+                inventory.setReservedQuantity(inventory.getReservedQuantity() + itemReq.getQuantity());
+                inventoryRepository.save(inventory);
+
+                BigDecimal itemSubtotal = category.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+                subtotal = subtotal.add(itemSubtotal);
+
+                bookingItems.add(BookingItem.builder()
+                        .ticketCategoryId(category.getId())
+                        .quantity(itemReq.getQuantity())
+                        .unitPrice(category.getPrice())
+                        .build());
             }
 
-            if (itemReq.getQuantity() > category.getMaxPerBooking()) {
-                throw new AppException(ErrorCode.NOT_ENOUGH_TICKETS, "Exceeds max per booking limit");
+            // 3. Voucher (Lock Voucher)
+            BigDecimal discount = BigDecimal.ZERO;
+            Voucher voucher = null;
+            if (request.getVoucherCode() != null && !request.getVoucherCode().isBlank()) {
+                voucher = voucherService.validateAndLock(request.getVoucherCode(), userId);
+                discount = voucherService.calculateDiscount(voucher, subtotal);
             }
 
-            // Lock inventory
-            TicketInventory inventory = inventoryRepository.findByIdForUpdate(category.getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.TICKET_CATEGORY_NOT_FOUND, "Inventory not found"));
+            BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
 
-            int available = inventory.getTotalQuantity() - inventory.getReservedQuantity() - inventory.getSoldQuantity();
-            if (available < itemReq.getQuantity()) {
-                throw new AppException(ErrorCode.TICKET_SOLD_OUT, "Not enough tickets for category " + category.getName());
+            // 4. Create Booking
+            Booking booking = Booking.builder()
+                    .bookingCode("BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
+                    .userId(userId)
+                    .status(BookingStatus.RECEIVED)
+                    .subtotal(subtotal)
+                    .discountAmount(discount)
+                    .totalAmount(total)
+                    .voucherId(voucher != null ? voucher.getId() : null)
+                    .expiresAt(ZonedDateTime.now().plusMinutes(15)) // 15 mins to pay
+                    .idempotencyKey(idempotencyKey)
+                    .build();
+            
+            try {
+                booking = bookingRepository.save(booking);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                // Concurrent retry with same idempotency key
+                return bookingRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)
+                        .map(b -> bookingMapper.toBookingResponse(b, bookingItemRepository.findByBookingId(b.getId())))
+                        .orElseThrow(() -> new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Booking creation failed due to concurrent request"));
             }
 
-            // Deduct
-            inventory.setReservedQuantity(inventory.getReservedQuantity() + itemReq.getQuantity());
-            inventoryRepository.save(inventory);
+            // Save Items
+            for (BookingItem item : bookingItems) {
+                item.setBookingId(booking.getId());
+                bookingItemRepository.save(item);
+            }
 
-            BigDecimal itemSubtotal = category.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
-            subtotal = subtotal.add(itemSubtotal);
+            // Redeem Voucher
+            if (voucher != null) {
+                voucherService.applyRedemption(voucher, userId, booking.getId(), discount);
+            }
 
-            bookingItems.add(BookingItem.builder()
-                    .ticketCategoryId(category.getId())
-                    .quantity(itemReq.getQuantity())
-                    .unitPrice(category.getPrice())
-                    .build());
+            return bookingMapper.toBookingResponse(booking, bookingItems);
+        } catch (Exception ex) {
+            // Roll back any Redis decrements if transaction fails before completion
+            for (var item : redisDeductedItems) {
+                inventoryRedisService.release(item.getTicketCategoryId(), item.getQuantity());
+            }
+            throw ex;
         }
-
-        // 3. Voucher (Lock Voucher)
-        BigDecimal discount = BigDecimal.ZERO;
-        Voucher voucher = null;
-        if (request.getVoucherCode() != null && !request.getVoucherCode().isBlank()) {
-            voucher = voucherService.validateAndLock(request.getVoucherCode(), userId);
-            discount = voucherService.calculateDiscount(voucher, subtotal);
-        }
-
-        BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
-
-        // 4. Create Booking
-        Booking booking = Booking.builder()
-                .bookingCode("BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
-                .userId(userId)
-                .status(BookingStatus.RECEIVED)
-                .subtotal(subtotal)
-                .discountAmount(discount)
-                .totalAmount(total)
-                .voucherId(voucher != null ? voucher.getId() : null)
-                .expiresAt(ZonedDateTime.now().plusMinutes(15)) // 15 mins to pay
-                .idempotencyKey(idempotencyKey)
-                .build();
-        
-        booking = bookingRepository.save(booking);
-
-        // Save Items
-        for (BookingItem item : bookingItems) {
-            item.setBookingId(booking.getId());
-            bookingItemRepository.save(item);
-        }
-
-
-        // Redeem Voucher
-        if (voucher != null) {
-            voucherService.applyRedemption(voucher, userId, booking.getId(), discount);
-        }
-
-        return bookingMapper.toBookingResponse(booking, bookingItems);
     }
 
     @Transactional

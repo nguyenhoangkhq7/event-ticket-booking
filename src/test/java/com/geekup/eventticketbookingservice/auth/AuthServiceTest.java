@@ -8,22 +8,29 @@ import com.geekup.eventticketbookingservice.user.Role;
 import com.geekup.eventticketbookingservice.user.User;
 import com.geekup.eventticketbookingservice.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("AuthService Unit Tests")
 class AuthServiceTest {
 
     @Mock
@@ -68,47 +75,107 @@ class AuthServiceTest {
                 .build();
     }
 
-    @Test
-    void register_Success() {
-        // Arrange
-        when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
-        when(userRepository.save(any(User.class))).thenReturn(testUser);
-        when(jwtService.generateToken(any(User.class))).thenReturn("dummyToken");
+    @Nested
+    @DisplayName("register() Tests")
+    class RegisterTests {
 
-        // Act
-        AuthResponse response = authService.register(registerRequest);
+        @Test
+        @DisplayName("Should successfully register a new user with CUSTOMER role, ACTIVE status, and hashed password")
+        void register_Success() {
+            // Arrange
+            when(userRepository.existsByEmail("john@example.com")).thenReturn(false);
+            when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
+            when(jwtService.generateToken(any(User.class))).thenReturn("dummyToken");
 
-        // Assert
-        assertNotNull(response);
-        assertEquals("dummyToken", response.getAccessToken());
-        verify(userRepository, times(1)).save(any(User.class));
+            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+
+            // Act
+            AuthResponse response = authService.register(registerRequest);
+
+            // Assert
+            assertNotNull(response);
+            assertEquals("dummyToken", response.getAccessToken());
+
+            verify(userRepository, times(1)).save(userCaptor.capture());
+            User capturedUser = userCaptor.getValue();
+            assertEquals("John Doe", capturedUser.getFullName());
+            assertEquals("john@example.com", capturedUser.getEmail());
+            assertEquals("encodedPassword", capturedUser.getPassword());
+            assertEquals(Role.CUSTOMER, capturedUser.getRole());
+            assertEquals("ACTIVE", capturedUser.getStatus());
+
+            verify(jwtService, times(1)).generateToken(capturedUser);
+        }
+
+        @Test
+        @DisplayName("Should throw IllegalArgumentException when email is already in use")
+        void register_EmailAlreadyInUse_ThrowsException() {
+            // Arrange
+            when(userRepository.existsByEmail("john@example.com")).thenReturn(true);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> authService.register(registerRequest)
+            );
+            assertEquals("Email is already in use", exception.getMessage());
+
+            verify(userRepository, never()).save(any(User.class));
+            verify(passwordEncoder, never()).encode(anyString());
+            verify(jwtService, never()).generateToken(any(User.class));
+        }
     }
 
-    @Test
-    void register_EmailAlreadyInUse_ThrowsException() {
-        // Arrange
-        when(userRepository.existsByEmail(anyString())).thenReturn(true);
+    @Nested
+    @DisplayName("login() Tests")
+    class LoginTests {
 
-        // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> authService.register(registerRequest));
-        verify(userRepository, never()).save(any(User.class));
-    }
+        @Test
+        @DisplayName("Should successfully authenticate and return AuthResponse with JWT token")
+        void login_Success() {
+            // Arrange
+            when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(testUser));
+            when(jwtService.generateToken(testUser)).thenReturn("dummyToken");
 
-    @Test
-    void login_Success() {
-        // Arrange
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(testUser));
-        when(jwtService.generateToken(any(User.class))).thenReturn("dummyToken");
+            // Act
+            AuthResponse response = authService.login(loginRequest);
 
-        // Act
-        AuthResponse response = authService.login(loginRequest);
+            // Assert
+            assertNotNull(response);
+            assertEquals("dummyToken", response.getAccessToken());
 
-        // Assert
-        assertNotNull(response);
-        assertEquals("dummyToken", response.getAccessToken());
-        verify(authenticationManager, times(1)).authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
-        );
+            verify(authenticationManager, times(1)).authenticate(
+                    new UsernamePasswordAuthenticationToken("john@example.com", "password123")
+            );
+            verify(userRepository, times(1)).findByEmail("john@example.com");
+            verify(jwtService, times(1)).generateToken(testUser);
+        }
+
+        @Test
+        @DisplayName("Should propagate BadCredentialsException when authentication fails")
+        void login_InvalidCredentials_ThrowsAuthenticationException() {
+            // Arrange
+            when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                    .thenThrow(new BadCredentialsException("Invalid email or password"));
+
+            // Act & Assert
+            assertThrows(BadCredentialsException.class, () -> authService.login(loginRequest));
+
+            verify(userRepository, never()).findByEmail(anyString());
+            verify(jwtService, never()).generateToken(any(User.class));
+        }
+
+        @Test
+        @DisplayName("Should throw NoSuchElementException when user is authenticated but not found in repository")
+        void login_UserNotFoundInRepo_ThrowsNoSuchElementException() {
+            // Arrange
+            when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.empty());
+
+            // Act & Assert
+            assertThrows(NoSuchElementException.class, () -> authService.login(loginRequest));
+
+            verify(authenticationManager, times(1)).authenticate(any(UsernamePasswordAuthenticationToken.class));
+            verify(jwtService, never()).generateToken(any(User.class));
+        }
     }
 }

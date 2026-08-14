@@ -2,12 +2,14 @@ package com.geekup.eventticketbookingservice.catalog;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "ticket_inventory")
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -27,10 +29,7 @@ public class TicketInventory {
     @Column(nullable = false)
     private Integer soldQuantity;
 
-    @Version
-    @Column(nullable = false)
-    private Long version;
-
-    @UpdateTimestamp
+    @LastModifiedDate
+    @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
 }

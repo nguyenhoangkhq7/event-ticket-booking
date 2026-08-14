@@ -19,6 +19,7 @@ public enum ErrorCode {
     INVALID_BOOKING_STATUS("INVALID_BOOKING_STATUS", "Invalid booking status transition", HttpStatus.BAD_REQUEST),
     UNAUTHORIZED("UNAUTHORIZED", "Unauthorized access", HttpStatus.UNAUTHORIZED),
     FORBIDDEN("FORBIDDEN", "Forbidden access", HttpStatus.FORBIDDEN),
+    RATE_LIMIT_EXCEEDED("RATE_LIMIT_EXCEEDED", "Too many requests, please try again later", HttpStatus.TOO_MANY_REQUESTS),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final String code;

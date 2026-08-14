@@ -2,13 +2,15 @@ package com.geekup.eventticketbookingservice.voucher;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "voucher_redemptions")
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,7 +33,7 @@ public class VoucherRedemption {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal discountAmount;
 
-    @CreationTimestamp
-    @Column(updatable = false)
+    @CreatedDate
+    @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 }

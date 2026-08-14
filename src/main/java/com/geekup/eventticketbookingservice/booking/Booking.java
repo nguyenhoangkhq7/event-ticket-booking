@@ -1,9 +1,9 @@
 package com.geekup.eventticketbookingservice.booking;
 
+import com.geekup.eventticketbookingservice.common.entity.BaseAuditEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -14,8 +14,8 @@ import java.time.ZonedDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class Booking {
+@SuperBuilder
+public class Booking extends BaseAuditEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -45,11 +45,4 @@ public class Booking {
 
     @Column(nullable = false, length = 100)
     private String idempotencyKey;
-
-    @CreationTimestamp
-    @Column(updatable = false)
-    private ZonedDateTime createdAt;
-
-    @UpdateTimestamp
-    private ZonedDateTime updatedAt;
 }
