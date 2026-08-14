@@ -1,6 +1,9 @@
 spring:
   application:
     name: event-ticket-booking-service
+  threads:
+    virtual:
+      enabled: true
 
   datasource:
     hikari:

@@ -53,7 +53,7 @@ Toàn bộ chỉ số benchmark tiêu chuẩn trong dự án được ghi nhận
 | **CPU** | 11th Gen Intel(R) Core(TM) i5-11400H @ 2.70GHz (6 Cores / 12 Threads) |
 | **RAM** | 16.0 GB DDR4 |
 | **Hệ điều hành** | Windows 11 64-bit |
-| **Hạ tầng Test** | Localhost (Spring Boot + PostgreSQL 16 + Redis 7 Docker + JMeter Engine) |
+| **Hạ tầng Test** | Localhost (Spring Boot + PostgreSQL 17 + Redis 7 Docker + JMeter Engine) |
 
 #### 💡 Hướng dẫn tinh chỉnh tham số khi chạy trên các cấu hình máy khác nhau:
 
@@ -146,7 +146,7 @@ docker exec -it event-ticket-redis redis-cli SET inventory:4 500000
 
 ### Cấp độ 3: Flash Sale Spike & Chống Bán Âm Vé (Spike Test)
 
-Sử dụng kịch bản [`jmeter/plans/flash_sale_spike_test.jmx`](file:///d:/projects/event-ticket-booking/event-ticket-booking-service/jmeter/plans/flash_sale_spike_test.jmx) với **Synchronizing Timer (Rendezvous Point)** gom 200 threads cùng bắn vào 1 Category trong cùng 1 mili-giây:
+Sử dụng kịch bản [`jmeter/plans/flash_sale_spike_test.jmx`](../jmeter/plans/flash_sale_spike_test.jmx) với **Synchronizing Timer (Rendezvous Point)** gom 200 threads cùng bắn vào 1 Category trong cùng 1 mili-giây:
 
 ```bash
 jmeter -n -t jmeter/plans/flash_sale_spike_test.jmx \

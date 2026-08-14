@@ -9,6 +9,8 @@ Hệ thống đặt vé concert trực tuyến xử lý high-concurrency, đư�
 - [Tech Stack](#-tech-stack)
 - [Kiến Trúc Dự Án](#-kiến-trúc-dự-án)
 - [Hướng Dẫn Cài Đặt & Chạy Local](#-hướng-dẫn-cài-đặt--chạy-local)
+- [Swagger / OpenAPI Documentation](#-swagger--openapi-documentation)
+- [Postman Collection](#-postman-collection)
 - [Hướng Dẫn Chạy Test](#-hướng-dẫn-chạy-test)
 - [Tài Liệu Chi Tiết](#-tài-liệu-chi-tiết)
 
@@ -182,6 +184,25 @@ Hệ thống cung cấp giao diện tương tác và tài liệu API theo chuẩ
   GET /api/concerts?page=0&size=20&sort=startAt,asc
   ```
   Response trả về cấu trúc `ApiResponse<Page<ConcertResponse>>` gồm mảng dữ liệu `data.content` cùng các trường phân trang `totalElements`, `totalPages`, `size`, `number`.
+
+---
+
+## 📮 Postman Collection
+
+Dự án cung cấp sẵn file Postman Collection đầy đủ các luồng Customer và Admin:
+
+- **File collection**: [`postman/event-ticket-booking.postman_collection.json`](postman/event-ticket-booking.postman_collection.json)
+- **Base URL mặc định**: `http://localhost:8080/api`
+
+### Các bước test nhanh bằng Postman:
+1. Mở Postman → Chọn **Import** → Kéo thả file `postman/event-ticket-booking.postman_collection.json`.
+2. Chạy request `auth > login-customer` (hoặc `login-admin`):
+   - Token sẽ được script tự động gán vào collection variable `{{access_token}}`.
+3. Thực hiện các request tiếp theo trong collection theo thứ tự:
+   - **Customer Flow**: `browse-concert` → `view-ticket-category` → `booking > create-booking` (tự động lưu `bookingId` & sinh `Idempotency-Key`) → `confirm-payment`.
+   - **Operation Flow**: `create-concert` → `publish-concert` → `add-ticket-category` → `set-inventory` → `create-voucher`.
+
+---
 
 ## 🧪 Hướng Dẫn Chạy Test
 
