@@ -5,6 +5,7 @@ import com.geekup.eventticketbookingservice.catalog.TicketCategory;
 import com.geekup.eventticketbookingservice.catalog.TicketInventory;
 import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
 import com.geekup.eventticketbookingservice.operation.dto.CreateConcertRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +18,7 @@ public class OperationConcertController {
     private final OperationService operationService;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Concert>> createConcert(@RequestBody CreateConcertRequest request) {
+    public ResponseEntity<ApiResponse<Concert>> createConcert(@Valid @RequestBody CreateConcertRequest request) {
         return ResponseEntity.ok(ApiResponse.success(operationService.createConcert(request)));
     }
 

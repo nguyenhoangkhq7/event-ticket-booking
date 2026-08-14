@@ -4,6 +4,7 @@ import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
 import com.geekup.eventticketbookingservice.operation.dto.CreateVoucherCampaignRequest;
 import com.geekup.eventticketbookingservice.voucher.Voucher;
 import com.geekup.eventticketbookingservice.voucher.DiscountType;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,7 +17,7 @@ public class OperationVoucherController {
     private final OperationService operationService;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Voucher>> createVoucher(@RequestBody CreateVoucherCampaignRequest request, @RequestParam(required = false) String code) {
+    public ResponseEntity<ApiResponse<Voucher>> createVoucher(@Valid @RequestBody CreateVoucherCampaignRequest request, @RequestParam(required = false) String code) {
         return ResponseEntity.ok(ApiResponse.success(operationService.createVoucher(
             request.getName(),
             code,

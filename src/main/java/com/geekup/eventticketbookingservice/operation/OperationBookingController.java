@@ -4,6 +4,7 @@ import com.geekup.eventticketbookingservice.booking.Booking;
 import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
 import com.geekup.eventticketbookingservice.operation.dto.UpdateBookingStatusRequest;
 import com.geekup.eventticketbookingservice.user.User;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,7 +27,7 @@ public class OperationBookingController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<Booking>> updateStatus(
             @PathVariable Long id,
-            @RequestBody UpdateBookingStatusRequest request,
+            @Valid @RequestBody UpdateBookingStatusRequest request,
             @AuthenticationPrincipal User admin
     ) {
         return ResponseEntity.ok(ApiResponse.success(operationService.updateBookingStatus(id, request, admin.getId())));

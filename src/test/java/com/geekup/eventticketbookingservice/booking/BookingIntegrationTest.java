@@ -523,6 +523,71 @@ public class BookingIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(jsonPath("$.success").value(false))
                     .andExpect(jsonPath("$.error.code").value(ErrorCode.VOUCHER_NOT_FOUND.getCode()));
         }
+
+        @Test
+        @DisplayName("Booking with empty items list returns 400 Bad Request (VALIDATION_ERROR)")
+        void createBooking_EmptyItems_Returns400BadRequest() throws Exception {
+            User user = createUniqueCustomer("val_empty");
+            String token = jwtService.generateToken(user);
+
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setItems(List.of());
+
+            mockMvc.perform(post("/api/bookings")
+                            .header("Authorization", "Bearer " + token)
+                            .header("Idempotency-Key", "idem-val-" + UUID.randomUUID())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        }
+
+        @Test
+        @DisplayName("Booking with negative quantity returns 400 Bad Request (VALIDATION_ERROR)")
+        void createBooking_NegativeQuantity_Returns400BadRequest() throws Exception {
+            User user = createUniqueCustomer("val_neg");
+            String token = jwtService.generateToken(user);
+
+            BookingItemRequest item = new BookingItemRequest();
+            item.setTicketCategoryId(1L);
+            item.setQuantity(-1);
+
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setItems(List.of(item));
+
+            mockMvc.perform(post("/api/bookings")
+                            .header("Authorization", "Bearer " + token)
+                            .header("Idempotency-Key", "idem-val-neg-" + UUID.randomUUID())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        }
+
+        @Test
+        @DisplayName("Booking with null category id returns 400 Bad Request (VALIDATION_ERROR)")
+        void createBooking_NullCategoryId_Returns400BadRequest() throws Exception {
+            User user = createUniqueCustomer("val_null_cat");
+            String token = jwtService.generateToken(user);
+
+            BookingItemRequest item = new BookingItemRequest();
+            item.setTicketCategoryId(null);
+            item.setQuantity(2);
+
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setItems(List.of(item));
+
+            mockMvc.perform(post("/api/bookings")
+                            .header("Authorization", "Bearer " + token)
+                            .header("Idempotency-Key", "idem-val-null-" + UUID.randomUUID())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        }
     }
 
     // =========================================================================

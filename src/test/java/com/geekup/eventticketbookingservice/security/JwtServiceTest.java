@@ -14,7 +14,7 @@ class JwtServiceTest {
     private JwtService jwtService;
     // 256-bit secret key for HMAC-SHA256
     private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
-    private static final long EXPIRATION_MS = 86400000L; // 24 hours
+    private static final long EXPIRATION_MS = 3600000L; // 1 hour
 
     private User testUser;
 

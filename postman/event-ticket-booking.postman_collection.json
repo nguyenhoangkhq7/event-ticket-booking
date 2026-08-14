@@ -225,7 +225,7 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
+                      "var jsonData = pm.response.json();\r\nvar token = (jsonData.data && jsonData.data.accessToken) ? jsonData.data.accessToken : jsonData.accessToken;\r\nif (token) {\r\n    pm.collectionVariables.set(\"access_token\", token);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
                     ]
                   }
                 }
@@ -263,7 +263,7 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
+                      "var jsonData = pm.response.json();\r\nvar token = (jsonData.data && jsonData.data.accessToken) ? jsonData.data.accessToken : jsonData.accessToken;\r\nif (token) {\r\n    pm.collectionVariables.set(\"access_token\", token);\r\n    console.log(\"Saved access_token to collection variables\");\r\n}"
                     ]
                   }
                 }
@@ -709,7 +709,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();\r\nif (jsonData.accessToken) {\r\n    pm.collectionVariables.set(\"admin_access_token\", jsonData.accessToken);\r\n    console.log(\"Saved admin_access_token to collection variables\");\r\n}"
+                  "var jsonData = pm.response.json();\r\nvar token = (jsonData.data && jsonData.data.accessToken) ? jsonData.data.accessToken : jsonData.accessToken;\r\nif (token) {\r\n    pm.collectionVariables.set(\"admin_access_token\", token);\r\n    console.log(\"Saved admin_access_token to collection variables\");\r\n}"
                 ]
               }
             }

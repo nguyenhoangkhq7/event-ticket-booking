@@ -3,6 +3,8 @@ package com.geekup.eventticketbookingservice.auth;
 import com.geekup.eventticketbookingservice.auth.dto.AuthResponse;
 import com.geekup.eventticketbookingservice.auth.dto.LoginRequest;
 import com.geekup.eventticketbookingservice.auth.dto.RegisterRequest;
+import com.geekup.eventticketbookingservice.common.exception.AppException;
+import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import com.geekup.eventticketbookingservice.security.JwtService;
 import com.geekup.eventticketbookingservice.user.Role;
 import com.geekup.eventticketbookingservice.user.User;
@@ -24,7 +26,7 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email is already in use");
+            throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         
         var user = User.builder()

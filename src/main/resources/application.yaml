@@ -41,7 +41,7 @@ application:
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
-      expiration: ${JWT_EXPIRATION:86400000}
+      expiration: ${JWT_EXPIRATION:3600000} # 1 hour (3600000ms)
 
 springdoc:
   api-docs:

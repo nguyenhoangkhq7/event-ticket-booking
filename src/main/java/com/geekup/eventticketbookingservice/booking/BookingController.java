@@ -4,6 +4,7 @@ import com.geekup.eventticketbookingservice.booking.dto.BookingResponse;
 import com.geekup.eventticketbookingservice.booking.dto.CreateBookingRequest;
 import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
 import com.geekup.eventticketbookingservice.user.User;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,7 +22,7 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @AuthenticationPrincipal User user,
-            @RequestBody CreateBookingRequest request,
+            @Valid @RequestBody CreateBookingRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponse.success(bookingService.createBooking(user.getId(), request, idempotencyKey)));

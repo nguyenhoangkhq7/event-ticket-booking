@@ -108,17 +108,17 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Should throw IllegalArgumentException when email is already in use")
+        @DisplayName("Should throw AppException with EMAIL_ALREADY_EXISTS when email is already in use")
         void register_EmailAlreadyInUse_ThrowsException() {
             // Arrange
             when(userRepository.existsByEmail("john@example.com")).thenReturn(true);
 
             // Act & Assert
-            IllegalArgumentException exception = assertThrows(
-                    IllegalArgumentException.class,
+            com.geekup.eventticketbookingservice.common.exception.AppException exception = assertThrows(
+                    com.geekup.eventticketbookingservice.common.exception.AppException.class,
                     () -> authService.register(registerRequest)
             );
-            assertEquals("Email is already in use", exception.getMessage());
+            assertEquals(com.geekup.eventticketbookingservice.common.exception.ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
 
             verify(userRepository, never()).save(any(User.class));
             verify(passwordEncoder, never()).encode(anyString());

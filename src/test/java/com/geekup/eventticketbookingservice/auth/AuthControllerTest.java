@@ -3,6 +3,9 @@ package com.geekup.eventticketbookingservice.auth;
 import com.geekup.eventticketbookingservice.auth.dto.AuthResponse;
 import com.geekup.eventticketbookingservice.auth.dto.LoginRequest;
 import com.geekup.eventticketbookingservice.auth.dto.RegisterRequest;
+import com.geekup.eventticketbookingservice.common.dto.ApiResponse;
+import com.geekup.eventticketbookingservice.common.exception.AppException;
+import com.geekup.eventticketbookingservice.common.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,19 +58,21 @@ class AuthControllerTest {
     class RegisterTests {
 
         @Test
-        @DisplayName("Should successfully register user and return AuthResponse with HTTP 200")
+        @DisplayName("Should successfully register user and return ApiResponse<AuthResponse> with HTTP 200")
         void register_Success() {
             // Arrange
             when(authService.register(any(RegisterRequest.class))).thenReturn(authResponse);
 
             // Act
-            ResponseEntity<AuthResponse> response = authController.register(registerRequest);
+            ResponseEntity<ApiResponse<AuthResponse>> response = authController.register(registerRequest);
 
             // Assert
             assertNotNull(response);
             assertEquals(HttpStatus.OK, response.getStatusCode());
             assertNotNull(response.getBody());
-            assertEquals("mock-jwt-token", response.getBody().getAccessToken());
+            assertTrue(response.getBody().isSuccess());
+            assertNotNull(response.getBody().getData());
+            assertEquals("mock-jwt-token", response.getBody().getData().getAccessToken());
             verify(authService, times(1)).register(registerRequest);
         }
 
@@ -76,14 +81,14 @@ class AuthControllerTest {
         void register_ServiceThrowsException_PropagatesException() {
             // Arrange
             when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new IllegalArgumentException("Email is already in use"));
+                    .thenThrow(new AppException(ErrorCode.EMAIL_ALREADY_EXISTS));
 
             // Act & Assert
-            IllegalArgumentException exception = assertThrows(
-                    IllegalArgumentException.class,
+            AppException exception = assertThrows(
+                    AppException.class,
                     () -> authController.register(registerRequest)
             );
-            assertEquals("Email is already in use", exception.getMessage());
+            assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
             verify(authService, times(1)).register(registerRequest);
         }
     }
@@ -93,19 +98,21 @@ class AuthControllerTest {
     class LoginTests {
 
         @Test
-        @DisplayName("Should successfully login user and return AuthResponse with HTTP 200")
+        @DisplayName("Should successfully login user and return ApiResponse<AuthResponse> with HTTP 200")
         void login_Success() {
             // Arrange
             when(authService.login(any(LoginRequest.class))).thenReturn(authResponse);
 
             // Act
-            ResponseEntity<AuthResponse> response = authController.login(loginRequest);
+            ResponseEntity<ApiResponse<AuthResponse>> response = authController.login(loginRequest);
 
             // Assert
             assertNotNull(response);
             assertEquals(HttpStatus.OK, response.getStatusCode());
             assertNotNull(response.getBody());
-            assertEquals("mock-jwt-token", response.getBody().getAccessToken());
+            assertTrue(response.getBody().isSuccess());
+            assertNotNull(response.getBody().getData());
+            assertEquals("mock-jwt-token", response.getBody().getData().getAccessToken());
             verify(authService, times(1)).login(loginRequest);
         }
 

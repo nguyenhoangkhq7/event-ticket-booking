@@ -116,7 +116,7 @@ Giá trị này không configurable qua application properties hay environment v
 **Giả định**:
 - Stateless JWT — server không lưu trữ token. Không có cơ chế revoke/blacklist token.
 - Không có Refresh Token. User phải đăng nhập lại khi token hết hạn.
-- Token expiration: 24 giờ (86400000ms, configurable qua `JWT_EXPIRATION` env var).
+- Token expiration: 1 giờ (3600000ms, configurable qua `JWT_EXPIRATION` env var).
 - JWT signing: HMAC-SHA256 với secret key từ environment variable.
 
 ### 1.10. Currency & Pricing
@@ -285,3 +285,11 @@ Entity `Concert` **không có field `imageUrl`** (khác biệt giữa DB schema 
 ### 2.18. Booking Code Collision Potential
 
 Booking code sử dụng 8 ký tự từ UUID (`BK-XXXXXXXX`), tương đương ~4 tỷ combinations. Với volume thấp hiện tại thì an toàn, nhưng không có mechanism retry nếu collision xảy ra (dù xác suất cực thấp).
+
+### 2.19. Chưa Hiện Thực Refresh Token & Token Revocation
+
+- **Hiện trạng**: Thời gian sống của Access Token là **1 giờ** (`3,600,000ms`, configurable qua `JWT_EXPIRATION`).
+- ⚠️ **Giới hạn**:
+  - Hệ thống **chưa hiện thực cơ chế Refresh Token** (`/api/auth/refresh`). Khi token hết hạn sau 1 giờ, client không thể tự động cấp lại token mới trong nền mà người dùng bắt buộc phải đăng nhập lại (`POST /api/auth/login`).
+  - Chưa có cơ chế thu hồi/vô hiệu hóa token tức thì (Token Blacklist / Revocation qua Redis) khi người dùng logout hoặc đổi mật khẩu. Token hợp lệ sẽ luôn có hiệu lực cho đến khi hết hạn TTL.
+
